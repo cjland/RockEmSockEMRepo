@@ -1,0 +1,5 @@
+{
+  "name": "SetList Flow",
+  "description": "A sleek, dark-mode setlist manager for bands. Organize your repertoire, build multiple sets with drag-and-drop, and calculate timing automatically.",
+  "requestFramePermissions": []
+}
