@@ -1,13 +1,13 @@
 import React from 'react';
-import { 
-  Music, 
-  Clock, 
-  GripVertical, 
-  Trash2, 
-  Plus, 
-  Youtube, 
-  FileSpreadsheet, 
-  Settings, 
+import {
+  Music,
+  Clock,
+  GripVertical,
+  Trash2,
+  Plus,
+  Youtube,
+  FileSpreadsheet,
+  Settings,
   MoreVertical,
   X,
   PlayCircle,
@@ -36,7 +36,10 @@ import {
   Copy,
   Layers,
   Globe,
-  RefreshCw
+  RefreshCw,
+  ArrowLeft,
+  ArrowRight,
+  Archive
 } from 'lucide-react';
 
 export const Icons = {
@@ -44,6 +47,7 @@ export const Icons = {
   Clock,
   Grip: GripVertical,
   Trash: Trash2,
+  Archive,
   Plus,
   Youtube,
   Sheet: FileSpreadsheet,
@@ -75,5 +79,7 @@ export const Icons = {
   Copy,
   Duplicate: Layers,
   Globe,
-  Refresh: RefreshCw
+  Refresh: RefreshCw,
+  ArrowLeft: ArrowLeft,
+  ArrowRight: ArrowRight
 };
