@@ -217,14 +217,14 @@ export const SetListColumn: React.FC<SetListColumnProps> = ({
   });
 
   const style = {
-    transform: CSS.Translate.toString(transform),
+    transform: CSS.Transform.toString(transform),
     transition,
     opacity: isColumnDragging ? 0.5 : 1,
   };
 
   const { setNodeRef: setDroppableRef } = useDroppable({
-    id: setList.id,
-    data: { type: 'SET', data: setList }
+    id: `${setList.id}-droppable`,
+    data: { type: 'SET', data: setList, setId: setList.id }
   });
 
   const totalDuration = setList.songs.reduce((acc, s) => acc + s.durationSeconds, 0);

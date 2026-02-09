@@ -10,7 +10,7 @@ import {
     DragEndEvent,
     defaultDropAnimationSideEffects,
     DropAnimation,
-    closestCorners
+    closestCenter
 } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 
@@ -28,6 +28,7 @@ import { SongManager } from './components/SongManager';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDebugLogger } from './hooks/useDebugLogger';
 import { DebugDashboard } from './components/DebugDashboard';
+import { EditGigModal } from './components/EditGigModal';
 
 const dropAnimation: DropAnimation = {
     sideEffects: defaultDropAnimationSideEffects({
@@ -641,80 +642,6 @@ const getUsedSongIds = (sets: SetList[]) => {
     return ids;
 };
 
-const EditGigModal = ({ gig, isOpen, onClose, onSave }: { gig: any, isOpen: boolean, onClose: () => void, onSave: (data: any) => void }) => {
-    const [formData, setFormData] = useState({
-        name: gig.name || '',
-        date: gig.date ? new Date(gig.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        location: gig.location || ''
-    });
-
-    useEffect(() => {
-        if (gig) {
-            setFormData({
-                name: gig.name || '',
-                date: gig.date ? new Date(gig.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                location: gig.location || ''
-            });
-        }
-    }, [gig]);
-
-    const handleSave = (e: React.FormEvent) => {
-        e.preventDefault();
-        onSave(formData);
-        onClose();
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-[#121215] border border-white/10 rounded-xl shadow-2xl w-full max-w-md p-6 ring-1 ring-white/5">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-white">Edit Gig Details</h2>
-                    <button onClick={onClose} className="text-zinc-500 hover:text-white"><Icons.Close size={20} /></button>
-                </div>
-
-                <form onSubmit={handleSave} className="space-y-4">
-                    <div>
-                        <label className="block text-xs text-zinc-400 mb-1">Gig Name</label>
-                        <input
-                            type="text"
-                            required
-                            value={formData.name}
-                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 text-sm text-white focus:border-primary outline-none"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs text-zinc-400 mb-1">Date</label>
-                        <input
-                            type="date"
-                            required
-                            value={formData.date}
-                            onChange={e => setFormData({ ...formData, date: e.target.value })}
-                            className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 text-sm text-white focus:border-primary outline-none"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-xs text-zinc-400 mb-1">Location</label>
-                        <input
-                            type="text"
-                            required
-                            value={formData.location}
-                            onChange={e => setFormData({ ...formData, location: e.target.value })}
-                            className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 text-sm text-white focus:border-primary outline-none"
-                        />
-                    </div>
-
-                    <div className="pt-4 flex justify-end gap-3">
-                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
-                        <button type="submit" className="px-6 py-2 bg-primary text-white text-sm font-bold rounded-md hover:bg-indigo-500 transition-colors shadow-lg shadow-primary/20">Save Changes</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
 
 export default function App() {
     // 1. URL Cleanup Effect Removed to prevent infinite loop with Supabase Auth
@@ -758,7 +685,7 @@ export default function App() {
         updateSongNote,
         updateSongInSets,
         clearAllSets
-    } = useSets(profile, gigDetails?.settings?.setOrder);
+    } = useSets(profile, currentGigId);
 
     // Dnd Sensors
     const sensors = useSensors(
@@ -888,6 +815,8 @@ export default function App() {
         }
     };
 
+
+
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event;
         setActiveDragItem({ type: active.data.current?.type, data: active.data.current?.data });
@@ -895,29 +824,29 @@ export default function App() {
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
-        console.log("Drag End:", { active: active.data.current, over: over?.data.current, overId: over?.id });
+        // console.log("Drag End:", { active: active.data.current, over: over?.data.current, overId: over?.id });
         setActiveDragItem(null);
         if (!over) return;
 
         // 1. Column Reorder
-        if (active.data.current?.type === 'SET_COLUMN' && over.data.current?.type === 'SET_COLUMN') {
-            if (active.id !== over.id) {
-                const oldIndex = sets.findIndex(s => s.id === active.id);
-                const newIndex = sets.findIndex(s => s.id === over.id);
-                reorderSets(oldIndex, newIndex);
+        if (active.data.current?.type === 'SET_COLUMN') {
+            const activeSetId = active.id;
+            let overSetId = over.id;
 
-                // Persist new order to Gig Settings
-                const newSets = [...sets];
-                const [movedSet] = newSets.splice(oldIndex, 1);
-                newSets.splice(newIndex, 0, movedSet);
-                const newOrder = newSets.map(s => s.id);
+            // Resolve overSetId if we dropped on the inner droppable or a song
+            if (over.data.current?.type === 'SET' || over.data.current?.type === 'SET_SONG') {
+                // Try to get from data first (if we added it), or infer
+                // We will add 'setId' to the droppable data in SetListColumn
+                overSetId = over.data.current.setId || over.data.current.originSetId;
+            }
 
-                updateGigDetails({
-                    settings: {
-                        ...gigDetails.settings,
-                        setOrder: newOrder
-                    }
-                });
+            if (overSetId && activeSetId !== overSetId) {
+                const oldIndex = sets.findIndex(s => s.id === activeSetId);
+                const newIndex = sets.findIndex(s => s.id === overSetId);
+
+                if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+                    reorderSets(oldIndex, newIndex);
+                }
             }
             return;
         }
@@ -936,7 +865,8 @@ export default function App() {
                     targetIndex = overSet.songs.findIndex(s => s.instanceId === over.id);
                 }
             } else if (over.data.current?.type === 'SET' || over.data.current?.type === 'SET_COLUMN') {
-                targetSetId = over.id;
+                // Check data.setId for 'SET', or id for 'SET_COLUMN'
+                targetSetId = over.data.current.setId || over.id;
                 // Append to end
                 const targetSet = sets.find(s => s.id === targetSetId);
                 targetIndex = targetSet ? targetSet.songs.length : 0;
@@ -964,7 +894,7 @@ export default function App() {
             let insertIndex = -1;
 
             if (over.data.current?.type === 'SET' || over.data.current?.type === 'SET_COLUMN') {
-                targetSetId = over.id;
+                targetSetId = over.data.current.setId || over.id;
             } else if (over.data.current?.type === 'SET_SONG') {
                 const overSet = sets.find(s => s.songs.some(so => so.instanceId === over.id));
                 if (overSet) {
@@ -1152,7 +1082,7 @@ export default function App() {
                 <div className="flex flex-1 overflow-hidden">
                     <DndContext
                         sensors={sensors}
-                        collisionDetection={closestCorners}
+                        collisionDetection={closestCenter}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
                         dropAnimation={dropAnimation}
@@ -1178,22 +1108,20 @@ export default function App() {
                                 <SortableContext items={sets.map(s => s.id)} strategy={horizontalListSortingStrategy}>
                                     <div className="flex gap-6 h-full min-w-max pb-4">
                                         {sets.map((set, i) => (
-                                            <ErrorBoundary key={set.id} name={`SetListColumn-${set.name}`}>
-                                                <SetListColumn
-                                                    key={set.id}
-                                                    setList={set}
-                                                    setIndex={i}
-                                                    totalSets={sets.length}
-                                                    bandMembers={bandSettings.members}
-                                                    duplicateSongIds={duplicateSongIds}
-                                                    onRemoveSet={requestRemoveSetWrapper}
-                                                    onRemoveSong={(setId, songId) => removeSongFromSet(setId, songId)}
-                                                    onUpdateNote={(setId, songId, note) => updateSongNote(setId, songId, note)}
-                                                    onPlaySong={(song) => song.videoUrl ? window.open(song.videoUrl, '_blank') : alert("No Video URL")}
-                                                    onUpdateSetDetails={updateSetDetails}
-                                                    onEditSong={setEditingSong}
-                                                />
-                                            </ErrorBoundary>
+                                            <SetListColumn
+                                                key={set.id}
+                                                setList={set}
+                                                setIndex={i}
+                                                totalSets={sets.length}
+                                                bandMembers={bandSettings.members}
+                                                duplicateSongIds={duplicateSongIds}
+                                                onRemoveSet={requestRemoveSetWrapper}
+                                                onRemoveSong={(setId, songId) => removeSongFromSet(setId, songId)}
+                                                onUpdateNote={(setId, songId, note) => updateSongNote(setId, songId, note)}
+                                                onPlaySong={(song) => song.videoUrl ? window.open(song.videoUrl, '_blank') : alert("No Video URL")}
+                                                onUpdateSetDetails={updateSetDetails}
+                                                onEditSong={setEditingSong}
+                                            />
                                         ))}
 
                                         {sets.length < 5 && (
@@ -1342,7 +1270,17 @@ export default function App() {
                 existingSongs={songs}
                 mode={editingSong && !songs.find(s => s.id === editingSong.id) ? 'add' : 'edit'}
             />
-            <PDFOptionsModal isOpen={showPDFOptions} onClose={() => setShowPDFOptions(false)} onGenerate={(ops) => { generatePDFDoc(sets, gigDetails, ops, bandSettings); setShowPDFOptions(false); }} />
+
+
+            <EditGigModal
+                isOpen={showEditingGig}
+                onClose={() => setShowEditingGig(false)}
+                gigDetails={gigDetails}
+                onSave={async (details) => {
+                    await updateGigDetails(details);
+                    setShowEditingGig(false);
+                }}
+            />
             <BandSettingsModal isOpen={showBandSettings} onClose={() => setShowBandSettings(false)} settings={bandSettings} onSave={handleSaveBandSettingsLogic} onApplyProfile={(u) => updateBandSettings({ ...bandSettings, ...u })} onApplyGigDetails={handleUpdateGigDetailsLogic} />
 
         </div>

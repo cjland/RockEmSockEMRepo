@@ -31,7 +31,8 @@ export type SetStatus = 'Draft' | 'Final' | 'Proposed';
 
 export interface SetList {
   id: string;
-  gig_id?: string; // New: Supabase FK
+  gigId?: string; // Mapped from gig_id
+  order_index?: number;
   name: string;
   songs: SetSong[];
   color?: string;

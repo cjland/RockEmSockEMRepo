@@ -5,48 +5,86 @@ import { SetList, SetSong, Song } from '../types';
 import { arrayMove } from '@dnd-kit/sortable';
 import { v4 as uuidv4 } from 'uuid';
 
-export function useSets(profile: any, setOrder?: string[]) {
+export function useSets(profile: any, gigId: string | null) {
     const [sets, setSets] = useState<SetList[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Sort logic...
-    const sortSets = (setsToSort: SetList[], order: string[] | undefined) => {
-        if (!order || order.length === 0) return setsToSort;
-
-        return [...setsToSort].sort((a, b) => {
-            const indexA = order.indexOf(a.id);
-            const indexB = order.indexOf(b.id);
-            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-            if (indexA !== -1) return -1;
-            if (indexB !== -1) return 1;
-            return 0;
-        });
-    };
-
-
-    // Serialize order to string for stable dependency
-    const orderKey = setOrder ? setOrder.join(',') : '';
-
     useEffect(() => {
-        if (!profile?.band_id) return;
+        if (!profile?.band_id || !gigId) {
+            setSets([]);
+            return;
+        }
 
         const fetchSets = async () => {
-            // ...
-            // (fetch logic)
-            // ...
-            // Inside success:
-            // setSets(sortSets(mappedSets, setOrder));
-        };
-        fetchSets();
-    }, [profile?.band_id, orderKey]); // Use primitive string dependency! // Re-run if setOrder changes (e.g. initial load or drag update)
-    // NOTE: Adding setOrder to dependency array might cause re-fetches. 
-    // Ideally we should just re-sort locally if data is already loaded.
-    // But since setOrder comes from Parent -> useBand -> useSets, 
-    // and useSets fetches internally...
-    // Let's optimize: fetch once, then Effect for sort.
+            setLoading(true);
+            try {
+                // Fetch Sets for this Gig, ordered by order_index
+                const { data: setsData, error } = await supabase
+                    .from('setlists')
+                    .select('*')
+                    .eq('band_id', profile.band_id)
+                    .eq('gig_id', gigId)
+                    .order('order_index', { ascending: true });
 
-    // Actually, splitting fetch and sort is better to avoid DB spam.
-    // But for now, let's just use the dependency array as it's simpler and setOrder changes are rare (drag end).
+                if (error) throw error;
+
+                if (setsData) {
+                    const mappedSets: SetList[] = await Promise.all(setsData.map(async (s) => {
+                        // Fetch songs for each set
+                        const { data: setSongsData } = await supabase
+                            .from('setlist_songs')
+                            .select(`
+                                *,
+                                songs:song_id (*)
+                            `)
+                            .eq('setlist_id', s.id)
+                            .order('order_index', { ascending: true });
+
+                        const setSongsDataTyped = setSongsData as any[];
+                        const setSongs: SetSong[] = setSongsDataTyped?.map((item: any) => {
+                            const s = item.songs;
+                            return {
+                                id: s.id,
+                                band_id: s.band_id,
+                                title: s.title,
+                                artist: s.artist,
+                                durationSeconds: s.duration_seconds,
+                                videoUrl: s.video_url,
+                                rating: s.rating,
+                                playedLive: s.played_live,
+                                generalNotes: s.general_notes,
+                                practiceStatus: s.practice_status,
+                                status: s.status || 'Active',
+                                createdAt: s.created_at,
+                                guitarLessonUrl: s.links?.guitar,
+                                bassLessonUrl: s.links?.bass,
+                                lyricsUrl: s.links?.lyrics,
+                                // SetSong specific
+                                instanceId: item.id,
+                                notes: item.notes || ''
+                            };
+                        }) || [];
+
+                        return {
+                            id: s.id,
+                            name: s.name,
+                            songs: setSongs,
+                            status: s.status,
+                            gigId: s.gig_id,
+                            order_index: s.order_index
+                        };
+                    }));
+                    setSets(mappedSets);
+                }
+            } catch (error) {
+                console.error("Error fetching sets:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchSets();
+    }, [profile?.band_id, gigId]);
 
     // Persistence Helpers
     const persistSetListSongs = async (setId: string, songs: SetSong[]) => {
@@ -63,23 +101,23 @@ export function useSets(profile: any, setOrder?: string[]) {
     };
 
     const addSet = async () => {
-        if (sets.length >= 5) return;
+        if (sets.length >= 5 || !profile?.band_id || !gigId) return;
 
         const newId = uuidv4();
         const newSetName = `Set ${sets.length + 1}`;
-        const newSet: SetList = { id: newId, name: newSetName, songs: [], status: 'Draft' };
+        const newSet: SetList = { id: newId, name: newSetName, songs: [], status: 'Draft', gigId };
 
         setSets(prev => [...prev, newSet]);
 
-        if (profile?.band_id) {
-            const { error } = await supabase.from('setlists').insert({
-                id: newId,
-                band_id: profile.band_id,
-                name: newSetName,
-                status: 'Draft',
-            });
-            if (error) console.error("Error creating set", error);
-        }
+        const { error } = await supabase.from('setlists').insert({
+            id: newId,
+            band_id: profile.band_id,
+            gig_id: gigId,
+            name: newSetName,
+            status: 'Draft',
+            order_index: sets.length // Append to end
+        });
+        if (error) console.error("Error creating set", error);
     };
 
     const removeSet = async (id: string) => {
@@ -101,9 +139,30 @@ export function useSets(profile: any, setOrder?: string[]) {
         }
     };
 
-    const reorderSets = (oldIndex: number, newIndex: number) => {
-        setSets(items => arrayMove(items, oldIndex, newIndex));
-        // No DB persistence for set order yet
+    const reorderSets = async (oldIndex: number, newIndex: number) => {
+        console.log(`[useSets] reorderSets: Moving ${oldIndex} to ${newIndex}`);
+        const newSets = arrayMove(sets, oldIndex, newIndex) as SetList[];
+        setSets(newSets);
+
+        // Persist order_index for all affects sets
+        const updates = newSets.map((set, index) => ({
+            id: set.id,
+            band_id: profile.band_id,
+            gig_id: gigId,
+            name: set.name,
+            status: set.status,
+            order_index: index
+        }));
+
+        console.log(`[useSets] reorderSets: Persisting updates to DB`, updates);
+
+        const { data, error } = await supabase.from('setlists').upsert(updates, { onConflict: 'id' }).select();
+
+        if (error) {
+            console.error("[useSets] Failed to reorder sets in DB", error);
+        } else {
+            console.log("[useSets] DB Update Success:", data);
+        }
     };
 
     const reorderSongInSet = (setId: string, oldIndex: number, newIndex: number) => {
@@ -152,32 +211,6 @@ export function useSets(profile: any, setOrder?: string[]) {
         newSets[sourceSetIndex] = { ...sourceSet, songs: newSourceSongs };
         newSets[targetSetIndex] = { ...targetSet, songs: newTargetSongs };
         setSets(newSets);
-
-        persistSetListSongs(sourceSetId, newSourceSongs); // This removes it implicitly? No upsert doesn't delete!
-        // We need to UPDATE the setlist_id for this song instance!
-        // Wait, persistSetListSongs uses upsert.
-        // If we move a song instance, we are changing its setlist_id.
-        // So we should just update that one record?
-        // Or drag-and-drop might imply creating a NEW instance if we copied? 
-        // But here we are moving the *same* instance.
-
-        // The helper `persistSetListSongs` upserts based on ID.
-        // If we change setlist_id for that ID, it moves it.
-        // BUT `persistSetListSongs` iterates over the *target* list.
-        // So updates for target will contain the song with new setlist_id.
-        // Updates for source will NOT contain the song.
-        // So upsert on source list won't delete it from source! 
-        // The song instance will just be updated to new setlist_id by the target update.
-        // BUT what about order? `persistSetListSongs` handles order.
-
-        // Correct logic: 
-        // 1. Update the Moved Song Instance to point to new Set and new Order.
-        // 2. Update remaining songs in Source to fix their order.
-        // 3. Update other songs in Target to fix their order.
-
-        // My `persistSetListSongs` iterates the whole array and upserts all. 
-        // So calling it on Target Set is enough to move the song and reorder target.
-        // Calling it on Source Set is enough to reorder source.
 
         persistSetListSongs(sourceSetId, newSourceSongs);
         persistSetListSongs(targetSetId, newTargetSongs);
@@ -272,16 +305,12 @@ export function useSets(profile: any, setOrder?: string[]) {
                 return s;
             })
         })));
-        // No DB update needed here as `songs` table update in useSongs handles the source of truth, 
-        // and setlist_songs just links to it. 
-        // Wait, setlist_songs doesn't store title/artist, it joins 'songs'.
-        // So UI update is enough.
     };
 
     const clearAllSets = async () => {
         setSets([]);
-        if (profile?.band_id) {
-            const { error } = await supabase.from('setlists').delete().eq('band_id', profile.band_id);
+        if (profile?.band_id && gigId) {
+            const { error } = await supabase.from('setlists').delete().eq('band_id', profile.band_id).eq('gig_id', gigId);
             if (error) {
                 console.error("Failed to clear sets", error);
                 alert("Failed to clear sets from database");
