@@ -43,7 +43,10 @@ import {
   Key,
   Search,
   List,
-  Loader2
+  Loader2,
+  BarChart,
+  Mic,
+  TrendingDown
 } from 'lucide-react';
 
 export const Icons = {
@@ -89,5 +92,8 @@ export const Icons = {
   Key,
   Search,
   List,
-  Loader: Loader2
+  Loader: Loader2,
+  BarChart,
+  Mic,
+  TrendingDown,
 };

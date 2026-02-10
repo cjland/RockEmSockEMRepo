@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Icons } from './ui/Icons';
 import { Gig } from '../types';
 import { formatTime12Hour, formatDurationHuman } from '../utils';
+import { SongMetrics } from './SongMetrics';
 
 interface GigSelectorProps {
     gigs: Gig[];
@@ -16,11 +17,12 @@ interface GigSelectorProps {
     userEmail?: string;
     logoUrl?: string;
     bandName?: string;
+    bandId?: string;
     totalSongs?: number;
     onImportSampleData?: (type: 'MINI' | 'FULL') => void;
 }
 
-export const GigSelector: React.FC<GigSelectorProps> = ({ gigs, onCreateGig, onSelectGig, onManageSongs, onSignOut, onChangePassword, onBandSettings, onEditGig, onDeleteGig, userEmail, logoUrl, bandName, totalSongs = 0, onImportSampleData }) => {
+export const GigSelector: React.FC<GigSelectorProps> = ({ gigs, onCreateGig, onSelectGig, onManageSongs, onSignOut, onChangePassword, onBandSettings, onEditGig, onDeleteGig, userEmail, logoUrl, bandName, bandId, totalSongs = 0, onImportSampleData }) => {
     const [showCreate, setShowCreate] = useState(false);
     const [newGigName, setNewGigName] = useState('');
     const [newGigDate, setNewGigDate] = useState('');
@@ -45,11 +47,17 @@ export const GigSelector: React.FC<GigSelectorProps> = ({ gigs, onCreateGig, onS
         }
     };
 
+    const parseLocalDate = (dateStr: string) => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    };
+
     const getDaysUntil = (dateStr: string) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const gigDate = new Date(dateStr);
-        gigDate.setHours(0, 0, 0, 0);
+
+        const gigDate = parseLocalDate(dateStr);
+
         const diffTime = gigDate.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -124,7 +132,7 @@ export const GigSelector: React.FC<GigSelectorProps> = ({ gigs, onCreateGig, onS
                     <div className="text-sm text-zinc-400 space-y-1">
                         <div className="flex items-center gap-2">
                             <Icons.Calendar size={14} className="text-zinc-500" />
-                            <span className="font-medium text-white">{new Date(gig.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                            <span className="font-medium text-white">{parseLocalDate(gig.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <Icons.Sort size={14} className="text-zinc-500" />
@@ -251,12 +259,20 @@ export const GigSelector: React.FC<GigSelectorProps> = ({ gigs, onCreateGig, onS
                             Gig Management
                             <span className="text-xs font-normal text-zinc-500 bg-zinc-800/50 px-2 py-0.5 rounded-full">{gigs.length} Total</span>
                         </h2>
-                        <button
-                            onClick={() => setShowCreate(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg border border-primary/20 transition-all text-sm font-bold"
-                        >
-                            <Icons.Plus size={16} /> Create New Gig
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => document.getElementById('song-metrics')?.scrollIntoView({ behavior: 'smooth' })}
+                                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg border border-white/10 transition-all text-sm font-bold"
+                            >
+                                <Icons.BarChart size={16} /> Song Metrics
+                            </button>
+                            <button
+                                onClick={() => setShowCreate(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg border border-primary/20 transition-all text-sm font-bold"
+                            >
+                                <Icons.Plus size={16} /> Create New Gig
+                            </button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -323,75 +339,87 @@ export const GigSelector: React.FC<GigSelectorProps> = ({ gigs, onCreateGig, onS
                         </button>
                     </div>
                 </section>
+
+                {/* Song Metrics Dashboard (Embedded) */}
+                {bandId && (
+                    <section>
+                        <SongMetrics
+                            activeBand={{ id: bandId, name: bandName || 'Band' }}
+                            embedded={true}
+                        />
+                    </section>
+                )}
             </div>
 
             {/* Create Gig Modal */}
-            {showCreate && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="bg-[#121215] border border-white/10 rounded-xl shadow-2xl w-full max-w-md p-6 ring-1 ring-white/5">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold text-white">Create New Gig</h2>
-                            <button onClick={() => setShowCreate(false)} className="text-zinc-500 hover:text-white"><Icons.Close size={20} /></button>
-                        </div>
-
-                        <form onSubmit={handleCreate} className="space-y-4">
-                            <div>
-                                <label className="block text-xs text-zinc-400 mb-1">Gig Name</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={newGigName}
-                                    onChange={e => setNewGigName(e.target.value)}
-                                    className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 text-sm text-white focus:border-primary outline-none"
-                                    placeholder="e.g. Summer Festival 2024"
-                                />
+            {
+                showCreate && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+                        <div className="bg-[#121215] border border-white/10 rounded-xl shadow-2xl w-full max-w-md p-6 ring-1 ring-white/5">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-bold text-white">Create New Gig</h2>
+                                <button onClick={() => setShowCreate(false)} className="text-zinc-500 hover:text-white"><Icons.Close size={20} /></button>
                             </div>
-                            <div>
-                                <label className="block text-xs text-zinc-400 mb-1">Date</label>
-                                <div className="relative">
+
+                            <form onSubmit={handleCreate} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs text-zinc-400 mb-1">Gig Name</label>
                                     <input
-                                        type="date"
+                                        type="text"
                                         required
-                                        value={newGigDate}
-                                        onChange={e => setNewGigDate(e.target.value)}
-                                        className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 pl-10 text-sm text-white focus:border-primary outline-none [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                                        onClick={(e) => (e.target as HTMLInputElement).showPicker()}
+                                        value={newGigName}
+                                        onChange={e => setNewGigName(e.target.value)}
+                                        className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 text-sm text-white focus:border-primary outline-none"
+                                        placeholder="e.g. Summer Festival 2024"
                                     />
-                                    <Icons.Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={16} />
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs text-zinc-400 mb-1">Location</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={newGigLocation}
-                                    onChange={e => setNewGigLocation(e.target.value)}
-                                    className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 text-sm text-white focus:border-primary outline-none"
-                                    placeholder="e.g. The Downtown Club"
-                                />
-                            </div>
+                                <div>
+                                    <label className="block text-xs text-zinc-400 mb-1">Date</label>
+                                    <div className="relative">
+                                        <input
+                                            type="date"
+                                            required
+                                            value={newGigDate}
+                                            onChange={e => setNewGigDate(e.target.value)}
+                                            className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 pl-10 text-sm text-white focus:border-primary outline-none [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                            onClick={(e) => (e.target as HTMLInputElement).showPicker()}
+                                        />
+                                        <Icons.Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={16} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-zinc-400 mb-1">Location</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={newGigLocation}
+                                        onChange={e => setNewGigLocation(e.target.value)}
+                                        className="w-full bg-black/30 border border-zinc-700 rounded p-2.5 text-sm text-white focus:border-primary outline-none"
+                                        placeholder="e.g. The Downtown Club"
+                                    />
+                                </div>
 
-                            <div className="pt-4 flex justify-end gap-3">
-                                <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white" disabled={isSubmitting}>Cancel</button>
-                                <button
-                                    type="submit"
-                                    className="px-6 py-2 bg-primary text-white text-sm font-bold rounded-md hover:bg-indigo-500 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                    disabled={isSubmitting}
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <Icons.Loader className="animate-spin" size={16} /> Creating...
-                                        </>
-                                    ) : (
-                                        "Create Gig"
-                                    )}
-                                </button>
-                            </div>
-                        </form>
+                                <div className="pt-4 flex justify-end gap-3">
+                                    <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-white" disabled={isSubmitting}>Cancel</button>
+                                    <button
+                                        type="submit"
+                                        className="px-6 py-2 bg-primary text-white text-sm font-bold rounded-md hover:bg-indigo-500 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        disabled={isSubmitting}
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Icons.Loader className="animate-spin" size={16} /> Creating...
+                                            </>
+                                        ) : (
+                                            "Create Gig"
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };

@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # REPLACE THESE WITH YOUR ACTUAL SUPABASE KEYS
+        # OR set them in a .env file
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    image: setlist-flow:latest
+    container_name: setlist-flow
+    ports:
+      - "8080:80"
+    restart: always

@@ -12,7 +12,7 @@ export interface Song {
   rating?: number; // 1-5
   playedLive?: boolean;
   practiceStatus: 'Ready' | 'Practice';
-  status: 'Active' | 'Archived'; // New soft-delete flag
+  status: 'Active' | 'Archived' | 'Hold'; // New soft-delete flag
   guitarLessonUrl?: string;
   bassLessonUrl?: string;
   lyricsUrl?: string; // Existing

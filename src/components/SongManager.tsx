@@ -12,6 +12,7 @@ interface SongManagerProps {
     onDeleteSong: (id: string) => void;
     onImport: () => void;
     onClearLibrary: () => void;
+    onViewMetrics: () => void;
 }
 
 const LinkIcon = ({ url, icon, label, text }: { url?: string, icon?: React.ReactNode, label: string, text?: string }) => {
@@ -38,10 +39,20 @@ const LinkIcon = ({ url, icon, label, text }: { url?: string, icon?: React.React
     );
 };
 
-export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, onBack, onAddSong, onUpdateSong, onDeleteSong, onImport, onClearLibrary }) => {
+export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, onBack, onAddSong, onUpdateSong, onDeleteSong, onImport, onClearLibrary, onViewMetrics }) => {
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<'ALL' | 'USED' | 'UNUSED'>('ALL');
-    const [sortBy, setSortBy] = useState<'title' | 'artist' | 'rating' | 'date'>('date');
+    const [sortBy, setSortBy] = useState<'title' | 'artist' | 'rating' | 'date' | 'status'>('date');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+    const handleSort = (key: 'title' | 'artist' | 'rating' | 'date' | 'status') => {
+        if (sortBy === key) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(key);
+            setSortDirection(key === 'date' || key === 'rating' ? 'desc' : 'asc'); // Default desc for date/rating, asc for text
+        }
+    };
 
     const filteredSongs = songs.filter(song => {
         const matchesSearch = song.title.toLowerCase().includes(search.toLowerCase()) || song.artist.toLowerCase().includes(search.toLowerCase());
@@ -51,10 +62,12 @@ export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, on
                     !usedSongIds.has(song.id);
         return matchesSearch && matchesFilter;
     }).sort((a, b) => {
-        if (sortBy === 'title') return a.title.localeCompare(b.title);
-        if (sortBy === 'artist') return a.artist.localeCompare(b.artist);
-        if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
-        if (sortBy === 'date') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        const modifier = sortDirection === 'asc' ? 1 : -1;
+        if (sortBy === 'title') return modifier * a.title.localeCompare(b.title);
+        if (sortBy === 'artist') return modifier * a.artist.localeCompare(b.artist);
+        if (sortBy === 'rating') return modifier * ((a.rating || 0) - (b.rating || 0));
+        if (sortBy === 'date') return modifier * (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        if (sortBy === 'status') return modifier * (a.status || '').localeCompare(b.status || '');
         return 0;
     });
 
@@ -96,6 +109,14 @@ export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, on
                         title="Delete All Songs"
                     >
                         <Icons.Trash size={16} />
+                    </button>
+                    <button
+                        onClick={onViewMetrics}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 text-sm font-medium rounded-md border border-indigo-500/20 transition-colors"
+                        title="View Analytics"
+                    >
+                        <Icons.BarChart size={16} />
+                        <span className="hidden sm:inline">Analytics</span>
                     </button>
                     <button
                         onClick={handleExport}
@@ -181,14 +202,22 @@ export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, on
                                 </select>
 
                                 <select
-                                    value={sortBy}
-                                    onChange={(e) => setSortBy(e.target.value as any)}
+                                    value={`${sortBy}-${sortDirection}`}
+                                    onChange={(e) => {
+                                        const [key, dir] = e.target.value.split('-');
+                                        setSortBy(key as any);
+                                        setSortDirection(dir as 'asc' | 'desc');
+                                    }}
                                     className="bg-black/40 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-primary"
                                 >
-                                    <option value="date">Date Added (Newest)</option>
-                                    <option value="title">Title (A-Z)</option>
-                                    <option value="artist">Artist (A-Z)</option>
-                                    <option value="rating">Rating (High-Low)</option>
+                                    <option value="date-desc">Newest First</option>
+                                    <option value="date-asc">Oldest First</option>
+                                    <option value="title-asc">Title (A-Z)</option>
+                                    <option value="title-desc">Title (Z-A)</option>
+                                    <option value="artist-asc">Artist (A-Z)</option>
+                                    <option value="artist-desc">Artist (Z-A)</option>
+                                    <option value="rating-desc">Highest Rated</option>
+                                    <option value="rating-asc">Lowest Rated</option>
                                 </select>
                             </div>
                         </div>
@@ -198,12 +227,22 @@ export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, on
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-white/5 bg-white/5 text-xs text-zinc-400 uppercase tracking-wider">
-                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('title')}>Title {sortBy === 'title' && '↑↓'}</th>
-                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('artist')}>Artist {sortBy === 'artist' && '↑↓'}</th>
-                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('rating')}>Rating {sortBy === 'rating' && '↑↓'}</th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors select-none" onClick={() => handleSort('title')}>
+                                            Title {sortBy === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                        </th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors select-none" onClick={() => handleSort('artist')}>
+                                            Artist {sortBy === 'artist' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                        </th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors select-none" onClick={() => handleSort('rating')}>
+                                            Rating {sortBy === 'rating' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                        </th>
                                         <th className="p-4 font-medium text-center">Time</th>
-                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('date')}>Created {sortBy === 'date' && '↑↓'}</th>
-                                        <th className="p-4 font-medium text-center">Status</th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors select-none" onClick={() => handleSort('date')}>
+                                            Created {sortBy === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                        </th>
+                                        <th className="p-4 font-medium text-center cursor-pointer hover:text-white transition-colors select-none" onClick={() => handleSort('status')}>
+                                            Status {sortBy === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+                                        </th>
                                         <th className="p-4 font-medium">Notes</th>
                                         <th className="p-4 font-medium text-center">Archive</th>
                                         <th className="p-4 font-medium">Links</th>

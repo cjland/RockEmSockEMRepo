@@ -25,6 +25,7 @@ import { useSongs } from './hooks/useSongs';
 import { useSets } from './hooks/useSets';
 import { GigSelector } from './components/GigSelector';
 import { SongManager } from './components/SongManager';
+import { SongMetrics } from './components/SongMetrics';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDebugLogger } from './hooks/useDebugLogger';
 import { DebugDashboard } from './components/DebugDashboard';
@@ -61,227 +62,7 @@ class SafePointerSensor extends PointerSensor {
     ];
 }
 
-// --- Edit Modal Component ---
-const EditSongModal = ({ song, isOpen, onClose, onSave, existingSongs = [], mode = 'edit' }: { song: Song | null, isOpen: boolean, onClose: () => void, onSave: (s: Song) => void, existingSongs?: Song[], mode?: 'add' | 'edit' }) => {
-    const [formData, setFormData] = React.useState<Song | null>(null);
-    const [durationStr, setDurationStr] = React.useState('');
-
-    const uniqueArtists = React.useMemo(() => {
-        const artists = new Set(existingSongs.map(s => s.artist).filter(Boolean));
-        return Array.from(artists).sort();
-    }, [existingSongs]);
-
-    React.useEffect(() => {
-        if (song) {
-            setFormData({ ...song });
-            setDurationStr(formatDuration(song.durationSeconds));
-        }
-    }, [song]);
-
-    if (!isOpen || !formData) return null;
-
-    const handleSave = () => {
-        if (formData) {
-            if (!formData.title?.trim() || !formData.artist?.trim()) {
-                alert("Title and Artist are required.");
-                return;
-            }
-
-            // Duplicate Check
-            if (mode === 'add') {
-                const isDuplicate = existingSongs.some(s =>
-                    s.title.toLowerCase() === formData.title.trim().toLowerCase() &&
-                    s.artist.toLowerCase() === formData.artist.trim().toLowerCase()
-                );
-                if (isDuplicate) {
-                    alert("A song with this Title and Artist already exists!");
-                    // Note: Ideally use a better modal here too, but this is inside a modal already.
-                    // keeping basic alert for now to minimize scope creep inside this modal, or pass up error?
-                    return;
-                }
-            }
-
-            onSave({
-                ...formData,
-                durationSeconds: parseDurationToSeconds(durationStr)
-            });
-            onClose();
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-[#121215]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto ring-1 ring-white/5">
-                <div className="flex items-center justify-between p-4 border-b border-white/5 bg-zinc-900 sticky top-0 z-10">
-                    <h3 className="font-semibold text-white flex items-center gap-2">
-                        {mode === 'add' ? <Icons.Plus size={16} className="text-primary" /> : <Icons.Edit size={16} className="text-primary" />}
-                        {mode === 'add' ? 'Adding New Song' : 'Edit Song Details'}
-                    </h3>
-                    <button onClick={onClose} className="text-zinc-500 hover:text-white"><Icons.Close size={20} /></button>
-                </div>
-
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Basic Info */}
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Basic Info</h4>
-                        <div>
-                            <label className="text-xs text-zinc-400 block mb-1">Song Title <span className="text-red-500">*</span></label>
-                            <input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none" placeholder="e.g. Bohemian Rhapsody" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-zinc-400 block mb-1">Artist <span className="text-red-500">*</span></label>
-                            <input
-                                type="text"
-                                value={formData.artist}
-                                onChange={e => setFormData({ ...formData, artist: e.target.value })}
-                                list="artist-list"
-                                className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
-                                placeholder="e.g. Queen"
-                            />
-                            <datalist id="artist-list">
-                                {uniqueArtists.map(artist => (
-                                    <option key={artist} value={artist} />
-                                ))}
-                            </datalist>
-                        </div>
-                        <div className="flex gap-4">
-                            <div className="flex-1">
-                                <label className="text-xs text-zinc-400 block mb-1">Duration (m:s) <span className="text-red-500">*</span></label>
-                                <input type="text" value={durationStr} onChange={e => setDurationStr(e.target.value)} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none font-mono" placeholder="0:00" />
-                            </div>
-                        </div>
-
-                        {/* Status Toggles */}
-                        <div className="bg-black/20 p-3 rounded-lg border border-white/5 space-y-3">
-                            {/* Played Live Toggle */}
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-zinc-300">Played Live</span>
-                                <button
-                                    onClick={() => setFormData(prev => {
-                                        const newVal = !(prev?.playedLive);
-                                        return {
-                                            ...prev!,
-                                            playedLive: newVal,
-                                            // Auto set ready if played live is checked
-                                            practiceStatus: newVal ? 'Ready' : prev?.practiceStatus
-                                        };
-                                    })}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.playedLive ? 'bg-green-600' : 'bg-zinc-700'}`}
-                                >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.playedLive ? 'translate-x-6' : 'translate-x-1'}`} />
-                                </button>
-                            </div>
-
-                            {/* Archived Toggle */}
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-zinc-300">Archived</span>
-                                <button
-                                    onClick={() => setFormData(prev => ({ ...prev!, status: prev?.status === 'Archived' ? 'Active' : 'Archived' }))}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.status === 'Archived' ? 'bg-orange-600' : 'bg-zinc-700'}`}
-                                >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.status === 'Archived' ? 'translate-x-6' : 'translate-x-1'}`} />
-                                </button>
-                            </div>
-
-
-                            {/* Status State */}
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-zinc-300">Song Status</span>
-                                <div className="flex bg-zinc-800 rounded-lg p-0.5">
-                                    <button
-                                        onClick={() => setFormData({ ...formData, practiceStatus: 'Practice', playedLive: false })}
-                                        className={`px-3 py-1 text-xs rounded-md transition-all ${formData.practiceStatus === 'Practice' ? 'bg-zinc-600 text-white' : 'text-zinc-500'}`}
-                                    >Practice</button>
-                                    <button
-                                        onClick={() => setFormData({ ...formData, practiceStatus: 'Ready' })}
-                                        className={`px-3 py-1 text-xs rounded-md transition-all ${formData.practiceStatus === 'Ready' ? 'bg-primary text-white' : 'text-zinc-500'}`}
-                                    >Ready</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Meta Info */}
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Metrics</h4>
-                        <div>
-                            <label className="text-xs text-zinc-400 block mb-1">Rating (1-5)</label>
-                            <div className="flex gap-2">
-                                {[1, 2, 3, 4, 5].map(star => (
-                                    <button key={star} onClick={() => setFormData({ ...formData, rating: star })} className={`text-xl ${star <= (formData.rating || 0) ? 'text-yellow-500' : 'text-zinc-700'}`}>★</button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-xs text-zinc-400 block mb-1">General Notes</label>
-                            <textarea
-                                rows={4}
-                                value={formData.generalNotes || ''}
-                                onChange={e => setFormData({ ...formData, generalNotes: e.target.value })}
-                                className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none resize-none"
-                                placeholder="Tuning, Capo, Key, etc."
-                            />
-                        </div>
-                    </div>
-
-                    {/* Links */}
-                    <div className="col-span-1 md:col-span-2 space-y-4 pt-4 border-t border-white/5">
-                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">External Links</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-xs text-zinc-400 block mb-1 flex items-center gap-1"><Icons.Youtube size={12} /> Video URL</label>
-                                <input type="text" value={formData.videoUrl || ''} onChange={e => setFormData({ ...formData, videoUrl: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://youtube.com/..." />
-                            </div>
-                            <div>
-                                <label className="text-xs text-zinc-400 block mb-1 flex items-center gap-1"><Icons.Link size={12} /> Lyrics URL</label>
-                                <input type="text" value={formData.lyricsUrl || ''} onChange={e => setFormData({ ...formData, lyricsUrl: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
-                            </div>
-                            <div>
-                                <label className="text-xs text-zinc-400 block mb-1 flex items-center gap-1"><Icons.Guitar size={12} /> Guitar Lesson</label>
-                                <input type="text" value={formData.guitarLessonUrl || ''} onChange={e => setFormData({ ...formData, guitarLessonUrl: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://youtube.com/..." />
-                            </div>
-                            <div>
-                                <label className="text-xs text-zinc-400 block mb-1 flex items-center gap-1"><Icons.Music size={12} /> Bass Lesson</label>
-                                <input type="text" value={formData.bassLessonUrl || ''} onChange={e => setFormData({ ...formData, bassLessonUrl: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://youtube.com/..." />
-                            </div>
-                        </div>
-
-                        <div className="pt-4 border-t border-white/5 space-y-4">
-                            <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">EXTERNAL PERFORMED BANK LINKS FOR THIS SONG</h4>
-                            <div className="grid grid-cols-1 gap-3">
-                                <div>
-                                    <label className="text-xs text-zinc-400 block mb-1">Version 1 URL</label>
-                                    <input type="text" value={formData.externalLink1 || ''} onChange={e => setFormData({ ...formData, externalLink1: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-zinc-400 block mb-1">Version 2 URL</label>
-                                    <input type="text" value={formData.externalLink2 || ''} onChange={e => setFormData({ ...formData, externalLink2: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-zinc-400 block mb-1">Version 3 URL</label>
-                                    <input type="text" value={formData.externalLink3 || ''} onChange={e => setFormData({ ...formData, externalLink3: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-zinc-400 block mb-1">Version 4 URL</label>
-                                    <input type="text" value={formData.externalLink4 || ''} onChange={e => setFormData({ ...formData, externalLink4: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex justify-end gap-2 p-4 border-t border-white/5 bg-zinc-900 sticky bottom-0 z-10">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400">Cancel</button>
-                    <button onClick={handleSave} className="px-6 py-2 bg-primary hover:bg-indigo-500 text-white rounded-md text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20">
-                        Save Song
-                    </button>
-                </div>
-            </div>
-        </div>
-
-    );
-};
+import { EditSongModal } from './components/EditSongModal';
 
 // PDF Options Modal Component
 const PDFOptionsModal = ({ isOpen, onClose, onGenerate }: { isOpen: boolean, onClose: () => void, onGenerate: (opts: PDFOptions) => void }) => {
@@ -574,7 +355,7 @@ export default function App() {
 
     // Local UI State
     const [activeDragItem, setActiveDragItem] = useState<{ type: string; data: any } | null>(null);
-    const [view, setView] = useState<'GIG_SELECT' | 'APP' | 'SONG_MANAGER'>('GIG_SELECT');
+    const [view, setView] = useState<'GIG_SELECT' | 'APP' | 'SONG_MANAGER' | 'METRICS'>('GIG_SELECT');
     const [showImport, setShowImport] = useState(false);
     const [importText, setImportText] = useState('');
     const [showGigDetails, setShowGigDetails] = useState(false);
@@ -877,6 +658,15 @@ export default function App() {
     }
 
     const renderContent = () => {
+        if (view === 'METRICS') {
+            return (
+                <SongMetrics
+                    activeBand={{ id: activeBand.id, name: bandSettings.name }}
+                    onBack={() => setView('SONG_MANAGER')}
+                />
+            );
+        }
+
         if (view === 'SONG_MANAGER') {
             return (
                 <ErrorBoundary name="SongManager">
@@ -922,6 +712,7 @@ export default function App() {
                             }
                         }}
                         onImport={() => setShowImport(true)}
+                        onViewMetrics={() => setView('METRICS')}
                         onClearLibrary={() => {
                             setConfirmState({
                                 type: 'CLEAR_LIBRARY',
@@ -970,6 +761,7 @@ export default function App() {
                     userEmail={user?.email}
                     logoUrl={bandSettings.logoUrl}
                     bandName={bandSettings.name}
+                    bandId={activeBand?.band_id}
                     totalSongs={songs.length}
                     onImportSampleData={handleImportSampleData}
                 />
@@ -1384,6 +1176,7 @@ export default function App() {
                 }}
                 existingSongs={songs}
                 mode={editingSong && !songs.find(s => s.id === editingSong.id) ? 'add' : 'edit'}
+                bandId={activeBand?.band_id}
             />
 
 
