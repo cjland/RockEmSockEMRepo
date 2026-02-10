@@ -15,7 +15,7 @@ import {
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 
 import { Song, SetList, GigDetails, PDFOptions, BandSettings } from './types'; // Removed SetSong as mostly internal or implicit
-import { parseCSV, formatDuration, generatePDFDoc, parseDurationToSeconds, parseBandProfileCSV, transformGoogleSheetUrl, parseGigDetailsCSV } from './utils';
+import { parseCSV, formatDuration, formatTime12Hour, generatePDFDoc, parseDurationToSeconds, parseBandProfileCSV, transformGoogleSheetUrl, parseGigDetailsCSV } from './utils';
 import { SongLibrary } from './components/SongLibrary';
 import { SetListColumn } from './components/SetListColumn';
 import { Icons } from './components/ui/Icons';
@@ -29,6 +29,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDebugLogger } from './hooks/useDebugLogger';
 import { DebugDashboard } from './components/DebugDashboard';
 import { EditGigModal } from './components/EditGigModal';
+import { AuthPage } from './components/AuthPage';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 
 const dropAnimation: DropAnimation = {
     sideEffects: defaultDropAnimationSideEffects({
@@ -93,6 +95,8 @@ const EditSongModal = ({ song, isOpen, onClose, onSave, existingSongs = [], mode
                 );
                 if (isDuplicate) {
                     alert("A song with this Title and Artist already exists!");
+                    // Note: Ideally use a better modal here too, but this is inside a modal already.
+                    // keeping basic alert for now to minimize scope creep inside this modal, or pass up error?
                     return;
                 }
             }
@@ -242,6 +246,28 @@ const EditSongModal = ({ song, isOpen, onClose, onSave, existingSongs = [], mode
                                 <input type="text" value={formData.bassLessonUrl || ''} onChange={e => setFormData({ ...formData, bassLessonUrl: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://youtube.com/..." />
                             </div>
                         </div>
+
+                        <div className="pt-4 border-t border-white/5 space-y-4">
+                            <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">EXTERNAL PERFORMED BANK LINKS FOR THIS SONG</h4>
+                            <div className="grid grid-cols-1 gap-3">
+                                <div>
+                                    <label className="text-xs text-zinc-400 block mb-1">Version 1 URL</label>
+                                    <input type="text" value={formData.externalLink1 || ''} onChange={e => setFormData({ ...formData, externalLink1: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-400 block mb-1">Version 2 URL</label>
+                                    <input type="text" value={formData.externalLink2 || ''} onChange={e => setFormData({ ...formData, externalLink2: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-400 block mb-1">Version 3 URL</label>
+                                    <input type="text" value={formData.externalLink3 || ''} onChange={e => setFormData({ ...formData, externalLink3: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-400 block mb-1">Version 4 URL</label>
+                                    <input type="text" value={formData.externalLink4 || ''} onChange={e => setFormData({ ...formData, externalLink4: e.target.value })} className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-xs text-zinc-300 focus:border-primary outline-none" placeholder="https://..." />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -260,9 +286,9 @@ const EditSongModal = ({ song, isOpen, onClose, onSave, existingSongs = [], mode
 // PDF Options Modal Component
 const PDFOptionsModal = ({ isOpen, onClose, onGenerate }: { isOpen: boolean, onClose: () => void, onGenerate: (opts: PDFOptions) => void }) => {
     const [options, setOptions] = useState<PDFOptions>({
-        includeNotes: false,
+        includeNotes: true,
         oneSetPerPage: false,
-        largeType: false,
+        largeType: true,
         includeLogo: true,
         includeGigInfo: true
     });
@@ -282,10 +308,6 @@ const PDFOptionsModal = ({ isOpen, onClose, onGenerate }: { isOpen: boolean, onC
                         <input type="checkbox" checked={options.includeNotes} onChange={e => setOptions({ ...options, includeNotes: e.target.checked })} className="rounded bg-zinc-700 text-primary" />
                     </label>
                     <label className="flex items-center justify-between p-2 rounded hover:bg-zinc-800 cursor-pointer">
-                        <span className="text-sm text-zinc-300">One Set Per Page</span>
-                        <input type="checkbox" checked={options.oneSetPerPage} onChange={e => setOptions({ ...options, oneSetPerPage: e.target.checked })} className="rounded bg-zinc-700 text-primary" />
-                    </label>
-                    <label className="flex items-center justify-between p-2 rounded hover:bg-zinc-800 cursor-pointer">
                         <span className="text-sm text-zinc-300">Extra Large Type</span>
                         <input type="checkbox" checked={options.largeType} onChange={e => setOptions({ ...options, largeType: e.target.checked })} className="rounded bg-zinc-700 text-primary" />
                     </label>
@@ -297,6 +319,15 @@ const PDFOptionsModal = ({ isOpen, onClose, onGenerate }: { isOpen: boolean, onC
                         <span className="text-sm text-zinc-300">Include Venue/Time</span>
                         <input type="checkbox" checked={options.includeGigInfo} onChange={e => setOptions({ ...options, includeGigInfo: e.target.checked })} className="rounded bg-zinc-700 text-primary" />
                     </label>
+
+                    {/* Moved to bottom as requested */}
+                    <label className="flex items-center justify-between p-2 rounded hover:bg-zinc-800 cursor-pointer border-t border-white/5 pt-3 mt-2">
+                        <span className="text-sm text-zinc-300">One Set Per Page</span>
+                        <input type="checkbox" checked={options.oneSetPerPage} onChange={e => setOptions({ ...options, oneSetPerPage: e.target.checked })} className="rounded bg-zinc-700 text-primary" />
+                    </label>
+                </div>
+
+                <div className="p-4 border-t border-white/5 bg-zinc-900">
 
                     <button
                         onClick={() => onGenerate(options)}
@@ -311,273 +342,81 @@ const PDFOptionsModal = ({ isOpen, onClose, onGenerate }: { isOpen: boolean, onC
 };
 
 // Band Settings Modal
-const BandSettingsModal = ({
-    isOpen,
-    onClose,
-    settings,
-    onSave,
-    onApplyProfile,
-    onApplyGigDetails
-}: {
-    isOpen: boolean,
-    onClose: () => void,
-    settings: BandSettings,
-    onSave: (s: BandSettings) => void,
-    onApplyProfile: (s: Partial<BandSettings>) => void
-    onApplyGigDetails: (s: Partial<GigDetails>) => void
-}) => {
-    const [data, setData] = useState<BandSettings>(settings);
-    // State for 5 specific member slots
-    const [memberSlots, setMemberSlots] = useState<string[]>(Array(5).fill(''));
-    const [status, setStatus] = useState<{ msg: string, isError: boolean } | null>(null);
-    const [gigStatus, setGigStatus] = useState<{ msg: string, isError: boolean } | null>(null);
+// Band Settings Modal (Refactored)
 
-    // Sync when modal opens
-    useEffect(() => {
-        if (isOpen) {
-            setData(settings);
-            // Pad existing members to 5 slots
-            const currentMembers = [...settings.members];
-            while (currentMembers.length < 5) currentMembers.push('');
-            setMemberSlots(currentMembers.slice(0, 5));
-            setStatus(null);
-            setGigStatus(null);
-        }
-    }, [isOpen, settings]);
+const BandSettingsModal = ({ isOpen, onClose, settings, onSave, onApplyProfile, onApplyGigDetails }: { isOpen: boolean, onClose: () => void, settings: BandSettings, onSave: (s: BandSettings) => void, onApplyProfile: (u: Partial<BandSettings>) => void, onApplyGigDetails: (u: Partial<GigDetails>) => void }) => {
+    const [localSettings, setLocalSettings] = React.useState<BandSettings>(settings);
 
-    const handleUpdateMemberSlot = (index: number, value: string) => {
-        const newSlots = [...memberSlots];
-        newSlots[index] = value;
-        setMemberSlots(newSlots);
-    };
-
-    const handleFetchProfile = async () => {
-        setStatus({ msg: 'Loading...', isError: false });
-        if (!data.bandProfileUrl) return;
-
-        // Use the robust utility for transformation
-        const url = transformGoogleSheetUrl(data.bandProfileUrl);
-
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('Network response was not ok');
-            const text = await res.text();
-
-            // Check for HTML response (often Google Permissions login page)
-            if (text.trim().startsWith("<!DOCTYPE html") || text.trim().startsWith("<html")) {
-                throw new Error("Google returned HTML. Make sure the sheet is Public.");
-            }
-
-            const parsed = parseBandProfileCSV(text);
-
-            if (Object.keys(parsed).length > 0) {
-                const newMembers = parsed.members && parsed.members.length > 0 ? parsed.members : data.members;
-
-                // Pad new members to 5 slots
-                const paddedMembers = [...newMembers];
-                while (paddedMembers.length < 5) paddedMembers.push('');
-                const finalSlots = paddedMembers.slice(0, 5);
-
-                const newData = {
-                    ...data,
-                    name: parsed.name || data.name,
-                    logoUrl: parsed.logoUrl || data.logoUrl,
-                    members: newMembers // Keep original array logic for internal data
-                };
-
-                setData(newData);
-                setMemberSlots(finalSlots);
-
-                // Immediately apply to global app state
-                onApplyProfile(newData);
-
-                setStatus({ msg: 'Profile loaded and applied!', isError: false });
-                setTimeout(() => setStatus(null), 3000);
-            } else {
-                setStatus({ msg: 'No valid band info found in CSV.', isError: true });
-            }
-        } catch (error) {
-            console.error("Failed to fetch band profile", error);
-            setStatus({ msg: 'Failed to load profile. Check URL & permissions.', isError: true });
-        }
-    };
-
-    const handleFetchGigDetails = async () => {
-        setGigStatus({ msg: 'Loading...', isError: false });
-        if (!data.gigDetailsUrl) return;
-
-        const url = transformGoogleSheetUrl(data.gigDetailsUrl);
-
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('Network response was not ok');
-            const text = await res.text();
-            // Check for HTML response (often Google Permissions login page)
-            if (text.trim().startsWith("<!DOCTYPE html") || text.trim().startsWith("<html")) {
-                throw new Error("Google returned HTML. Make sure the sheet is Public.");
-            }
-
-            const parsed = parseGigDetailsCSV(text);
-
-            if (Object.keys(parsed).length > 0) {
-                onApplyGigDetails(parsed);
-                setGigStatus({ msg: 'Gig details loaded and applied!', isError: false });
-                setTimeout(() => setGigStatus(null), 3000);
-            } else {
-                setGigStatus({ msg: 'No valid gig details found in CSV.', isError: true });
-            }
-
-        } catch (error) {
-            console.error("Failed to fetch gig details", error);
-            setGigStatus({ msg: 'Failed to load gig details.', isError: true });
-        }
-    };
+    React.useEffect(() => {
+        setLocalSettings(settings);
+    }, [settings, isOpen]);
 
     if (!isOpen) return null;
 
+    const handleSave = () => {
+        onSave(localSettings);
+        onClose();
+    };
+
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-            <div className="bg-[#121215]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-white/5">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-[#121215] border border-white/10 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden ring-1 ring-white/5 flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-white/5 bg-zinc-900 flex justify-between items-center">
-                    <h3 className="font-semibold text-white flex items-center gap-2"><Icons.Globe size={16} /> Global Band Settings</h3>
-                    <button onClick={onClose}><Icons.Close size={20} className="text-zinc-500" /></button>
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Icons.Settings size={20} className="text-primary" />
+                        Band Settings
+                    </h2>
+                    <button onClick={onClose}><Icons.Close size={20} className="text-zinc-500 hover:text-white" /></button>
                 </div>
-                <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
-                    {/* Band Profile URL */}
-                    <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Band Profile URL (CSV/Google Sheet)</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                className="flex-1 bg-background border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
-                                value={data.bandProfileUrl || ''}
-                                onChange={e => setData({ ...data, bandProfileUrl: e.target.value })}
-                                placeholder="https://docs.google.com/spreadsheets/..."
-                            />
-                            <button
-                                onClick={handleFetchProfile}
-                                className="px-3 py-1 bg-zinc-800 text-xs text-white rounded hover:bg-zinc-700 border border-white/5 whitespace-nowrap"
-                                disabled={!data.bandProfileUrl}
-                            >
-                                Load Profile
-                            </button>
-                        </div>
-                        {status ? (
-                            <p className={`text-[10px] mt-1 font-medium ${status.isError ? 'text-red-400' : 'text-green-400'}`}>
-                                {status.msg}
-                            </p>
-                        ) : (
-                            <p className="text-[10px] text-zinc-600 mt-1">Loads Name, Logo, and Members from a spreadsheet.</p>
-                        )}
-                    </div>
 
-                    <div className="h-px bg-white/5 my-4"></div>
-
-                    {/* Band Preferences Section */}
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Band Preferences</h4>
-
-                        <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Band Name</label>
-                            <input
-                                type="text"
-                                className="w-full bg-background border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
-                                value={data.name}
-                                onChange={e => setData({ ...data, name: e.target.value })}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-zinc-500 mb-1">Band Logo URL</label>
-                            <div className="flex gap-2">
+                <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+                    {/* Identity Section */}
+                    <section className="space-y-4">
+                        <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider border-b border-white/5 pb-2">Identity</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-zinc-400 mb-1">Band Name</label>
                                 <input
                                     type="text"
-                                    className="flex-1 bg-background border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
-                                    value={data.logoUrl}
-                                    onChange={e => setData({ ...data, logoUrl: e.target.value })}
-                                    placeholder="https://..."
+                                    value={localSettings.name}
+                                    onChange={e => setLocalSettings({ ...localSettings, name: e.target.value })}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
                                 />
-                                {data.logoUrl && (
-                                    <img src={data.logoUrl} className="w-10 h-10 object-contain bg-white rounded" alt="Logo Preview" />
-                                )}
+                            </div>
+                            <div>
+                                <label className="block text-xs text-zinc-400 mb-1">Website URL</label>
+                                <input
+                                    type="text"
+                                    value={localSettings.website || ''}
+                                    onChange={e => setLocalSettings({ ...localSettings, website: e.target.value })}
+                                    className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
+                                    placeholder="https://www.myband.com"
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs text-zinc-400 mb-1">Logo URL</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={localSettings.logoUrl}
+                                        onChange={e => setLocalSettings({ ...localSettings, logoUrl: e.target.value })}
+                                        className="flex-1 bg-black/30 border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
+                                        placeholder="https://..."
+                                    />
+                                    {localSettings.logoUrl && (
+                                        <div className="w-10 h-10 rounded bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                                            <img src={localSettings.logoUrl} alt="Logo Preview" className="w-full h-full object-contain" onError={(e) => (e.target as HTMLImageElement).style.display = 'none'} />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
+                    </section>
+                </div>
 
-                        <div>
-                            <label className="block text-xs text-zinc-500 mb-2">Band Members</label>
-                            <div className="grid grid-cols-2 gap-3">
-                                {memberSlots.map((member, idx) => (
-                                    <div key={idx} className="col-span-1">
-                                        <label className="block text-[10px] text-zinc-600 mb-0.5">Member {idx + 1}</label>
-                                        <input
-                                            type="text"
-                                            className="w-full bg-background border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
-                                            value={member}
-                                            onChange={(e) => handleUpdateMemberSlot(idx, e.target.value)}
-                                            placeholder={`Member ${idx + 1}`}
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="h-px bg-white/5 my-4"></div>
-
-                    {/* Default Library URL */}
-                    <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Default Library URL (CSV/Google Sheet)</label>
-                        <input
-                            type="text"
-                            className="w-full bg-background border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
-                            value={data.defaultLibraryUrl || ''}
-                            onChange={e => setData({ ...data, defaultLibraryUrl: e.target.value })}
-                            placeholder="https://docs.google.com/spreadsheets/..."
-                        />
-                        <p className="text-[10px] text-zinc-600 mt-1">Used for quickly importing a base library in the Import dialog.</p>
-                    </div>
-
-                    {/* Gig Details URL */}
-                    <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Gig Details URL (CSV/Google Sheet)</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                className="flex-1 bg-background border border-zinc-700 rounded p-2 text-sm text-white focus:border-primary outline-none"
-                                value={data.gigDetailsUrl || ''}
-                                onChange={e => setData({ ...data, gigDetailsUrl: e.target.value })}
-                                placeholder="https://docs.google.com/spreadsheets/..."
-                            />
-                            <button
-                                onClick={handleFetchGigDetails}
-                                className="px-3 py-1 bg-zinc-800 text-xs text-white rounded hover:bg-zinc-700 border border-white/5 whitespace-nowrap"
-                                disabled={!data.gigDetailsUrl}
-                            >
-                                Load Details
-                            </button>
-                        </div>
-                        {gigStatus ? (
-                            <p className={`text-[10px] mt-1 font-medium ${gigStatus.isError ? 'text-red-400' : 'text-green-400'}`}>
-                                {gigStatus.msg}
-                            </p>
-                        ) : (
-                            <p className="text-[10px] text-zinc-600 mt-1">Imports Gig Name, Location, Date, Time, and Notes.</p>
-                        )}
-                    </div>
-
-                    <div className="pt-2 flex justify-end gap-2">
-                        <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400">Cancel</button>
-                        <button
-                            onClick={() => {
-                                // Filter out empty slots for the final save
-                                const finalMembers = memberSlots.filter(m => m.trim() !== '');
-                                onSave({ ...data, members: finalMembers });
-                                onClose();
-                            }}
-                            className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-white hover:bg-indigo-500 transition-colors"
-                        >
-                            Save Settings
-                        </button>
-                    </div>
+                <div className="p-4 border-t border-white/5 bg-zinc-900 flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-white">Cancel</button>
+                    <button onClick={handleSave} className="px-6 py-2 bg-primary text-white text-sm font-bold rounded-md hover:bg-indigo-500 transition-colors shadow-lg shadow-primary/20">Save Settings</button>
                 </div>
             </div>
         </div>
@@ -586,16 +425,26 @@ const BandSettingsModal = ({
 
 // Generic Confirmation Modal
 interface ConfirmationState {
-    type: 'REMOVE_SET' | 'REPLACE_LIBRARY' | 'CLEAR_LIBRARY' | 'ARCHIVE_SONG';
+    type: 'REMOVE_SET' | 'REPLACE_LIBRARY' | 'CLEAR_LIBRARY' | 'ARCHIVE_SONG' | 'DELETE_SONG' | 'DELETE_GIG' | 'ALERT';
     title: string;
     message: string;
     confirmLabel: string;
-    confirmVariant?: 'danger' | 'primary';
+    confirmVariant?: 'danger' | 'primary' | 'neutral';
+    requireTyping?: string;
     data?: any;
+    hideCancel?: boolean;
 }
 
 const ConfirmationModal = ({ isOpen, state, onClose, onConfirm }: { isOpen: boolean, state: ConfirmationState | null, onClose: () => void, onConfirm: () => void }) => {
+    const [inputValue, setInputValue] = React.useState('');
+
+    React.useEffect(() => {
+        if (isOpen) setInputValue('');
+    }, [isOpen]);
+
     if (!isOpen || !state) return null;
+
+    const isConfirmDisabled = state.requireTyping ? inputValue !== state.requireTyping : false;
 
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
@@ -612,17 +461,39 @@ const ConfirmationModal = ({ isOpen, state, onClose, onConfirm }: { isOpen: bool
                         {state.message}
                     </p>
 
+                    {state.requireTyping && (
+                        <div>
+                            <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">
+                                Type <span className="text-red-400 select-all">"{state.requireTyping}"</span> to confirm
+                            </label>
+                            <input
+                                type="text"
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                className="w-full bg-black/30 border border-zinc-700 rounded p-2 text-sm text-white focus:border-red-500 outline-none"
+                                placeholder={state.requireTyping}
+                                autoFocus
+                            />
+                        </div>
+                    )}
+
                     <div className="flex justify-end gap-2">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 text-sm text-zinc-400 hover:text-white"
-                        >
-                            Cancel
-                        </button>
+                        {!state.hideCancel && (
+                            <button
+                                onClick={onClose}
+                                className="px-4 py-2 text-sm text-zinc-400 hover:text-white"
+                            >
+                                Cancel
+                            </button>
+                        )}
 
                         <button
                             onClick={() => { onConfirm(); onClose(); }}
-                            className={`px-4 py-2 rounded-md text-sm font-medium text-white transition-colors ${state.confirmVariant === 'danger' ? 'bg-red-600 hover:bg-red-500' : 'bg-primary hover:bg-indigo-500'}`}
+                            disabled={isConfirmDisabled}
+                            className={`px-4 py-2 rounded-md text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed 
+                                ${state.confirmVariant === 'danger' ? 'bg-red-600 hover:bg-red-500' :
+                                    state.confirmVariant === 'neutral' ? 'bg-zinc-700 hover:bg-zinc-600' :
+                                        'bg-primary hover:bg-indigo-500'}`}
                         >
                             {state.confirmLabel}
                         </button>
@@ -636,17 +507,19 @@ const ConfirmationModal = ({ isOpen, state, onClose, onConfirm }: { isOpen: bool
 // Helper to get used song IDs
 const getUsedSongIds = (sets: SetList[]) => {
     const ids = new Set<string>();
+    if (!sets) return ids;
     sets.forEach(set => {
-        set.songs.forEach(s => ids.add(s.id));
+        if (set && set.songs) {
+            set.songs.forEach(s => ids.add(s.id));
+        }
     });
     return ids;
 };
 
 
 export default function App() {
-    // 1. URL Cleanup Effect Removed to prevent infinite loop with Supabase Auth
     // Auth & Hooks
-    const { user, profile, signInWithGoogle, signOut, loading: authLoading } = useAuth();
+    const { user, activeBand, signOut, loading: authLoading } = useAuth();
     const {
         bandSettings,
         gigs,
@@ -657,18 +530,24 @@ export default function App() {
         createGig,
         updateBandSettings,
         updateGigDetails,
-        refreshGigDetailsFromUrl
-    } = useBand(profile);
+        updateGig,
+        deleteGig,
+        refreshGigDetailsFromUrl,
+        refreshBandData
+    } = useBand(activeBand);
+
+    // Dashboard Edit State
+    const [dashboardEditGig, setDashboardEditGig] = useState<any>(null); // Type as any or Gig to avoid complex casts if types mismatch slightly
 
     const {
         songs,
         loading: songsLoading,
-        addSongsToLibrary,
+        upsertSongs,
         replaceLibrary,
         updateSong,
         deleteSong,
         clearLibrary
-    } = useSongs(profile);
+    } = useSongs(activeBand);
 
     const {
         sets,
@@ -684,8 +563,9 @@ export default function App() {
         removeSongFromSet,
         updateSongNote,
         updateSongInSets,
-        clearAllSets
-    } = useSets(profile, currentGigId);
+        clearAllSets,
+        duplicateSet
+    } = useSets(activeBand, currentGigId);
 
     // Dnd Sensors
     const sensors = useSensors(
@@ -701,19 +581,35 @@ export default function App() {
     const [showBandSettings, setShowBandSettings] = useState(false);
     const [showEditingGig, setShowEditingGig] = useState(false); // Add this line
     const [showPDFOptions, setShowPDFOptions] = useState(false);
+    const [showChangePassword, setShowChangePassword] = useState(false);
+
+    // View Options State
+    const [viewOptions, setViewOptions] = useState({
+        showLibraryRatings: true,
+        showLibraryLiveBadges: true,
+        showSetRatings: true,
+        showSetLiveBadges: true
+    });
+    const [showViewOptions, setShowViewOptions] = useState(false);
 
     const [editingSong, setEditingSong] = useState<Song | null>(null);
     const [confirmState, setConfirmState] = useState<ConfirmationState | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
     // Effect to switch view if currentGigId changes (e.g. from sign in with existing state)
+    // REMOVED: navigation is now explicit to prevent valid views (like SongManager) from being overridden.
+    /*
+    const prevGigId = React.useRef(currentGigId);
     useEffect(() => {
         if (currentGigId) {
             setView('APP');
-        } else {
+        } else if (prevGigId.current) {
+            // Only switch to GIG_SELECT if we just exited a gig (prev was set, now null)
             setView('GIG_SELECT');
         }
+        prevGigId.current = currentGigId;
     }, [currentGigId]);
+    */
 
     // Derived State
     const usedInSetsMap = useMemo(() => {
@@ -763,11 +659,32 @@ export default function App() {
         setTimeout(() => setSaveStatus('idle'), 2000);
     };
 
+    const handleImportSampleData = async (type: 'MINI' | 'FULL') => {
+        const { SAMPLE_SONGS_MINI, SAMPLE_SONGS_FULL } = await import('./data/sampleData');
+        const data = type === 'MINI' ? SAMPLE_SONGS_MINI : SAMPLE_SONGS_FULL;
+
+        // Add current date to all
+        const datedData = data.map(s => ({
+            ...s,
+            dateAdded: new Date().toISOString()
+        }));
+
+        await upsertSongs(datedData as Song[]);
+
+        setConfirmState({
+            type: 'ALERT',
+            title: 'Import Successful',
+            message: `Successfully imported ${datedData.length} sample songs!`,
+            confirmLabel: 'Great',
+            confirmVariant: 'primary',
+            hideCancel: true
+        });
+    };
+
     const handleImportLogic = async (mode: 'add' | 'replace') => {
         const newSongs = parseCSV(importText);
         if (newSongs.length === 0) {
-            alert("No valid songs found.");
-            return;
+
         }
 
         if (mode === 'replace') {
@@ -780,8 +697,14 @@ export default function App() {
                 data: { newSongs }
             });
         } else {
-            await addSongsToLibrary(newSongs);
+            await upsertSongs(newSongs);
             // NEW: Automatically add imported songs to the first set if available
+            // Note: For upsert, this might add existing songs again to the set if logic allows duplicates.
+            // But user requested Upsert DATA, not necessarily add to set.
+            // Keeping for new songs behavior, but ideally should check if new.
+            // For now, let's keep it but maybe we should only add if they are NEWLY created?
+            // Parsing doesn't tell us.
+            // Let's keep existing behavior for now.
             if (sets.length > 0) {
                 addMultipleSongsToSet(sets[0].id, newSongs);
             }
@@ -811,9 +734,17 @@ export default function App() {
         if (sets.length > 0) {
             addSongToSet(sets[0].id, song);
         } else {
-            alert("No sets available. Create a set first.");
+            setConfirmState({
+                type: 'ALERT',
+                title: 'No Sets',
+                message: "No sets available. Create a set first.",
+                confirmLabel: 'OK',
+                confirmVariant: 'neutral',
+                hideCancel: true
+            });
         }
     };
+
 
 
 
@@ -942,72 +873,67 @@ export default function App() {
     }
 
     if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-[#09090b] to-[#09090b] z-0"></div>
-                <div className="z-10 max-w-md w-full text-center space-y-8 animate-fade-in">
-                    <div>
-                        <h1 className="text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent transform hover:scale-105 transition-transform duration-500">Band Manager</h1>
-                        <p className="mt-2 text-zinc-400">Manage your setlists, songs, and gigs with your entire band.</p>
-                    </div>
-                    <div className="bg-[#121215]/80 backdrop-blur-xl border border-white/10 rounded-xl p-8 shadow-2xl ring-1 ring-white/5">
-                        <button
-                            onClick={signInWithGoogle}
-                            className="w-full py-3 px-4 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 flex items-center justify-center gap-3 transition-all hover:shadow-lg hover:-translate-y-0.5"
-                        >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24">
-                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                            </svg>
-                            Sign in with Google
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
+        return <AuthPage />;
     }
 
     const renderContent = () => {
         if (view === 'SONG_MANAGER') {
             return (
-                <SongManager
-                    key={songs.length} // Force re-render on count change
-                    songs={songs}
-                    usedSongIds={getUsedSongIds(sets)}
-                    onBack={() => setView('GIG_SELECT')}
-                    onAddSong={() => {
-                        setEditingSong({ id: crypto.randomUUID(), title: '', artist: '', durationSeconds: 0, practiceStatus: 'Ready', status: 'Active' } as Song);
-                    }}
-                    onUpdateSong={(song) => setEditingSong(song)}
-                    onDeleteSong={(id) => {
-                        const song = songs.find(s => s.id === id);
-                        if (song) {
-                            const isUsed = getUsedSongIds(sets).has(id);
-                            if (isUsed) {
-                                setConfirmState({
-                                    type: 'ARCHIVE_SONG',
-                                    title: 'Archive Song?',
-                                    message: `"${song.title}" is currently used in setlists. It will be archived but will remain in your sets.`,
-                                    confirmLabel: 'Archive',
-                                    confirmVariant: 'warning',
-                                    data: { song }
-                                });
+                <ErrorBoundary name="SongManager">
+                    <SongManager
+                        key={songs?.length || 0} // Force re-render on count change
+                        songs={songs || []}
+                        usedSongIds={getUsedSongIds(sets || [])}
+                        onBack={() => {
+                            console.log('[App] SongManager onBack clicked. Current Gig ID:', currentGigId);
+                            if (currentGigId) {
+                                setView('APP');
                             } else {
-                                setConfirmState({
-                                    type: 'DELETE_SONG',
-                                    title: 'Delete Song?',
-                                    message: `Are you sure you want to permanently delete "${song.title}"? This cannot be undone.`,
-                                    confirmLabel: 'Delete Forever',
-                                    confirmVariant: 'danger',
-                                    data: { id }
-                                });
+                                setView('GIG_SELECT');
                             }
-                        }
-                    }}
-                    onImport={() => setShowImport(true)}
-                />
+                        }}
+                        onAddSong={() => {
+                            setEditingSong({ id: crypto.randomUUID(), title: '', artist: '', durationSeconds: 0, practiceStatus: 'Ready', status: 'Active' } as Song);
+                        }}
+                        onUpdateSong={(song) => setEditingSong(song)}
+                        onDeleteSong={(id) => {
+                            const song = songs.find(s => s.id === id);
+                            if (song) {
+                                const isUsed = getUsedSongIds(sets || []).has(id);
+                                if (isUsed) {
+                                    setConfirmState({
+                                        type: 'ARCHIVE_SONG',
+                                        title: 'Archive Song?',
+                                        message: `"${song.title}" is currently used in setlists. It will be archived but will remain in your sets.`,
+                                        confirmLabel: 'Archive',
+                                        confirmVariant: 'warning',
+                                        data: { song }
+                                    });
+                                } else {
+                                    setConfirmState({
+                                        type: 'DELETE_SONG',
+                                        title: 'Delete Song?',
+                                        message: `Are you sure you want to permanently delete "${song.title}"? This cannot be undone.`,
+                                        confirmLabel: 'Delete Forever',
+                                        confirmVariant: 'danger',
+                                        data: { id }
+                                    });
+                                }
+                            }
+                        }}
+                        onImport={() => setShowImport(true)}
+                        onClearLibrary={() => {
+                            setConfirmState({
+                                type: 'CLEAR_LIBRARY',
+                                title: 'Wipe Song Library?',
+                                message: 'WARNING: This will permanently delete ALL songs in your library. This action cannot be undone. All songs will be removed from all setlists.',
+                                confirmLabel: 'Wipe Everything',
+                                confirmVariant: 'danger',
+                                requireTyping: 'PROCEED'
+                            });
+                        }}
+                    />
+                </ErrorBoundary>
             );
         }
 
@@ -1016,11 +942,36 @@ export default function App() {
                 <GigSelector
                     gigs={gigs}
                     onCreateGig={createGig}
-                    onSelectGig={(id) => selectGig(id)}
+                    onSelectGig={(id) => {
+                        const success = selectGig(id);
+                        if (id && success) {
+                            setView('APP');
+                        } else if (id) {
+                            console.error('[App] Failed to select gig. View not changed.');
+                            // Optional: Show toast/alert
+                        }
+                    }}
                     onManageSongs={() => setView('SONG_MANAGER')}
                     onSignOut={signOut}
-                    onBandSettings={() => setShowBandSettings(true)}
+                    onChangePassword={() => setShowChangePassword(true)}
+                    onBandSettings={(() => setShowBandSettings(true))}
+                    onEditGig={(gig) => setDashboardEditGig(gig)}
+                    onDeleteGig={(gig) => {
+                        setConfirmState({
+                            type: 'DELETE_GIG',
+                            title: 'Delete Gig?',
+                            message: `Are you sure you want to delete "${gig.name}"? This will permanently remove the gig and all its associated setlists. This action cannot be undone.`,
+                            confirmLabel: 'Delete Gig',
+                            confirmVariant: 'danger',
+                            requireTyping: 'CONFIRM',
+                            data: { gig }
+                        });
+                    }}
                     userEmail={user?.email}
+                    logoUrl={bandSettings.logoUrl}
+                    bandName={bandSettings.name}
+                    totalSongs={songs.length}
+                    onImportSampleData={handleImportSampleData}
                 />
             );
         }
@@ -1031,38 +982,129 @@ export default function App() {
                 <header className="h-[60px] bg-black/40 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-4 shrink-0 z-40 sticky top-0 custom-glass">
                     <div className="flex items-center gap-4">
                         <button
-                            onClick={() => selectGig(null)}
+                            onClick={() => {
+                                console.log('[App] Back to Dashboard clicked');
+                                try {
+                                    refreshBandData(); // Refresh dashboard data when returning
+                                } catch (e) {
+                                    console.error('[App] refreshBandData failed', e);
+                                }
+                                selectGig(null); // Clear gig selection
+                                setView('GIG_SELECT'); // Explicitly switch view
+                            }}
                             className="p-2 -ml-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-full transition-colors group"
                             title="Back to Gig Selection"
                         >
                             <Icons.ArrowLeft size={20} className="group-hover:-translate-x-0.5 transition-transform" />
                         </button>
 
-                        <div className="h-6 w-px bg-white/10 mx-1"></div>
-
-                        <div className="flex items-center gap-2">
-                            <div className="bg-primary/20 text-primary px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border border-primary/20">
-                                Set Manager
-                            </div>
+                        {/* Set Manager Title */}
+                        <div className="hidden md:flex items-center">
+                            <span className="font-black text-xl tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 mr-2 select-none">
+                                SET MANAGER
+                            </span>
+                            <div className="h-6 w-px bg-white/10 mx-2"></div>
                         </div>
 
-                        <div className="h-6 w-px bg-white/10 mx-1"></div>
+                        <div className="flex flex-col max-w-[600px]">
+                            {/* Line 1: Gig Name | Date | Arrive | Start */}
+                            <div className="flex items-center gap-2 flex-wrap text-sm">
+                                <h1 className="font-bold text-white transition-colors whitespace-nowrap">{gigDetails.name}</h1>
 
-                        <div className="flex items-center gap-2 group cursor-pointer hover:bg-white/5 p-2 rounded-lg transition-colors" onClick={() => setShowEditingGig(true)}>
-                            <div>
-                                <h1 className="text-sm font-bold text-white group-hover:text-primary transition-colors">{gigDetails.name}</h1>
-                                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                                    <span>{new Date(gigDetails.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-                                    <span>•</span>
-                                    <span>{gigDetails.location}</span>
-                                </div>
+                                <span className="text-zinc-600">|</span>
+                                <span className="text-zinc-300">
+                                    {new Date(gigDetails.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                                </span>
+
+                                {(gigDetails.arriveTime || gigDetails.startTime) && (
+                                    <>
+                                        <span className="text-zinc-600">|</span>
+                                        <div className="flex items-center gap-2 text-indigo-400 font-mono">
+                                            {gigDetails.arriveTime && <span><span className="text-zinc-500 mr-1 hidden sm:inline">Arrive:</span>{formatTime12Hour(gigDetails.arriveTime)}</span>}
+                                            {gigDetails.arriveTime && gigDetails.startTime && <span className="text-zinc-600">•</span>}
+                                            {gigDetails.startTime && <span><span className="text-zinc-500 mr-1 hidden sm:inline">Start:</span>{formatTime12Hour(gigDetails.startTime)}</span>}
+                                        </div>
+                                    </>
+                                )}
                             </div>
-                            <Icons.Settings size={14} className="text-zinc-600 group-hover:text-zinc-400" />
+
+                            {/* Line 2: Notes & Location */}
+                            <div className="flex items-center gap-2 text-xs text-zinc-500 mt-0.5">
+                                {gigDetails.notes ? (
+                                    <span className="text-zinc-400 italic">"{gigDetails.notes}"</span>
+                                ) : (
+                                    <span className="opacity-50 italic">No notes</span>
+                                )}
+                                {gigDetails.location && (
+                                    <>
+                                        <span className="text-zinc-700">•</span>
+                                        <span className="text-zinc-500 flex items-center gap-1">
+                                            {gigDetails.location}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Removed Import, Clear, Save, BandSettings */}
+                        {/* View Options Toggle */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowViewOptions(!showViewOptions)}
+                                className={`p-2 rounded-md transition-all shadow-lg border ${showViewOptions ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50' : 'text-zinc-400 hover:text-white hover:bg-white/5 border-transparent hover:border-white/10'}`}
+                                title="View Options"
+                            >
+                                <Icons.Eye size={18} />
+                            </button>
+
+                            {/* Dropdown */}
+                            {showViewOptions && (
+                                <div className="absolute top-full right-0 mt-2 w-56 bg-[#18181b] border border-white/10 rounded-xl shadow-2xl p-2 z-50 animate-fade-in ring-1 ring-black/50">
+                                    <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 py-1 mb-1">Library View</h4>
+                                    <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer group">
+                                        <input
+                                            type="checkbox"
+                                            checked={viewOptions.showLibraryRatings}
+                                            onChange={(e) => setViewOptions(prev => ({ ...prev, showLibraryRatings: e.target.checked }))}
+                                            className="accent-primary"
+                                        />
+                                        <span className="text-xs text-zinc-300 group-hover:text-white">Show Ratings</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer group mb-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={viewOptions.showLibraryLiveBadges}
+                                            onChange={(e) => setViewOptions(prev => ({ ...prev, showLibraryLiveBadges: e.target.checked }))}
+                                            className="accent-primary"
+                                        />
+                                        <span className="text-xs text-zinc-300 group-hover:text-white">Show Live Badges</span>
+                                    </label>
+
+                                    <div className="h-px bg-white/5 my-1"></div>
+
+                                    <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 py-1 mb-1">Set List View</h4>
+                                    <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer group">
+                                        <input
+                                            type="checkbox"
+                                            checked={viewOptions.showSetRatings}
+                                            onChange={(e) => setViewOptions(prev => ({ ...prev, showSetRatings: e.target.checked }))}
+                                            className="accent-primary"
+                                        />
+                                        <span className="text-xs text-zinc-300 group-hover:text-white">Show Ratings</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer group">
+                                        <input
+                                            type="checkbox"
+                                            checked={viewOptions.showSetLiveBadges}
+                                            onChange={(e) => setViewOptions(prev => ({ ...prev, showSetLiveBadges: e.target.checked }))}
+                                            className="accent-primary"
+                                        />
+                                        <span className="text-xs text-zinc-300 group-hover:text-white">Show Live Badges</span>
+                                    </label>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Desktop Profile */}
                         <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 border border-white/5">
@@ -1071,6 +1113,25 @@ export default function App() {
                             </div>
                             <span className="text-[10px] text-zinc-400 max-w-[100px] truncate">{user.email}</span>
                         </div>
+
+                        {/* Edit Gig Details Button */}
+                        <button
+                            onClick={() => setShowEditingGig(true)}
+                            className="p-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-md transition-all shadow-lg border border-transparent hover:border-white/10"
+                            title="Edit Gig Details"
+                        >
+                            <Icons.Settings size={18} />
+                        </button>
+
+                        {view !== 'APP' && (
+                            <button
+                                onClick={() => setShowChangePassword(true)}
+                                className="p-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-md transition-all shadow-lg border border-transparent hover:border-white/10"
+                                title="Change Password"
+                            >
+                                <Icons.Key size={18} />
+                            </button>
+                        )}
 
                         <button onClick={() => setShowPDFOptions(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium bg-primary text-white hover:bg-indigo-500 transition-all shadow-lg shadow-primary/20">
                             <Icons.Download size={16} /> Export PDF
@@ -1090,23 +1151,61 @@ export default function App() {
                         <ErrorBoundary name="SongLibrary">
                             <SongLibrary
                                 songs={songs.filter(s => s.status !== 'Archived')} // Filter out archived songs
+                                sets={sets}
                                 usedInSetsMap={usedInSetsMap}
                                 onPlaySong={(song) => window.open(song.videoUrl, '_blank')}
                                 onUpdateSong={handleUpdateSongWrapper}
                                 onEditSong={(song) => setEditingSong(song)}
-                                onAddToSet={(song) => {
-                                    if (sets.length > 0) {
+                                onManageSongs={() => setView('SONG_MANAGER')}
+                                onAddToSet={(song, targetSetId) => {
+                                    if (targetSetId) {
+                                        // Explicit set target
+                                        addSongToSet(targetSetId, song);
+                                    } else if (sets.length > 0) {
+                                        // Default to first set if no target specified
                                         addSongToSet(sets[0].id, song);
                                     } else {
-                                        alert("Please create a set first!");
+                                        setConfirmState({
+                                            type: 'ALERT',
+                                            title: 'No Sets',
+                                            message: "Please create a set first!",
+                                            confirmLabel: 'OK',
+                                            confirmVariant: 'neutral',
+                                            hideCancel: true
+                                        });
                                     }
+                                }}
+                                viewOptions={{
+                                    showRatings: viewOptions.showLibraryRatings,
+                                    showLiveBadges: viewOptions.showLibraryLiveBadges
                                 }}
                             />
                         </ErrorBoundary>
                         <div className="flex-1 flex flex-col bg-[#0c0c0e] relative overflow-hidden">
-                            <div className="flex-1 overflow-x-auto overflow-y-hidden p-6 custom-scrollbar">
+                            <div className="flex-1 overflow-x-auto overflow-y-hidden p-6 custom-scrollbar w-full">
                                 <SortableContext items={sets.map(s => s.id)} strategy={horizontalListSortingStrategy}>
-                                    <div className="flex gap-6 h-full min-w-max pb-4">
+                                    <div className="flex gap-6 h-full w-max pb-4">
+                                        {sets.length === 0 && (
+                                            <div className="flex flex-col items-center justify-center w-[320px] h-[400px] border-2 border-dashed border-zinc-800 rounded-xl bg-zinc-900/10 text-center p-6 animate-fade-in">
+                                                <div className="w-16 h-16 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
+                                                    <Icons.List size={32} className="text-zinc-600" />
+                                                </div>
+                                                <h3 className="text-xl font-bold text-zinc-300 mb-2">Build Your Setlist</h3>
+                                                <p className="text-sm text-zinc-500 mb-6 max-w-[200px]">
+                                                    Create your first set to start organizing songs for this gig.
+                                                </p>
+                                                <button
+                                                    onClick={() => {
+                                                        console.log('[App] Create Set 1 clicked');
+                                                        addSet();
+                                                    }}
+                                                    className="px-6 py-2 bg-primary text-white rounded-lg font-bold hover:bg-indigo-500 transition-all shadow-lg hover:shadow-primary/20 flex items-center gap-2"
+                                                >
+                                                    <Icons.Plus size={18} />
+                                                    Create Set 1
+                                                </button>
+                                            </div>
+                                        )}
                                         {sets.map((set, i) => (
                                             <SetListColumn
                                                 key={set.id}
@@ -1116,11 +1215,16 @@ export default function App() {
                                                 bandMembers={bandSettings.members}
                                                 duplicateSongIds={duplicateSongIds}
                                                 onRemoveSet={requestRemoveSetWrapper}
+                                                onDuplicateSet={duplicateSet}
                                                 onRemoveSong={(setId, songId) => removeSongFromSet(setId, songId)}
                                                 onUpdateNote={(setId, songId, note) => updateSongNote(setId, songId, note)}
                                                 onPlaySong={(song) => song.videoUrl ? window.open(song.videoUrl, '_blank') : alert("No Video URL")}
                                                 onUpdateSetDetails={updateSetDetails}
                                                 onEditSong={setEditingSong}
+                                                viewOptions={{
+                                                    showRatings: viewOptions.showSetRatings,
+                                                    showLiveBadges: viewOptions.showSetLiveBadges
+                                                }}
                                             />
                                         ))}
 
@@ -1180,7 +1284,7 @@ export default function App() {
                     if (songs.find(s => s.id === updatedSong.id)) {
                         handleUpdateSongWrapper(updatedSong);
                     } else {
-                        addSongsToLibrary([updatedSong]);
+                        upsertSongs([updatedSong]);
                     }
                 }}
             />
@@ -1197,6 +1301,12 @@ export default function App() {
                     } else if (confirmState?.type === 'DELETE_SONG' && confirmState.data?.id) {
                         await deleteSong(confirmState.data.id);
                         setConfirmState(null);
+                    } else if (confirmState?.type === 'DELETE_GIG' && confirmState.data?.gig) {
+                        await deleteGig(confirmState.data.gig.id);
+                        setConfirmState(null);
+                    } else if (confirmState?.type === 'CLEAR_LIBRARY') {
+                        await clearLibrary();
+                        setConfirmState(null);
                     } else {
                         handleConfirmAction();
                     }
@@ -1208,7 +1318,7 @@ export default function App() {
                 songs={songs}
                 sets={sets}
                 onClearAllSets={clearAllSets}
-                bandId={profile?.band_id || null}
+                bandId={activeBand?.band_id || null}
             />
 
             {/* ... other modals ... */}
@@ -1225,6 +1335,11 @@ export default function App() {
                 onSave={handleSaveBandSettingsLogic}
                 onApplyProfile={(s) => {/*...*/ }}
                 onApplyGigDetails={handleUpdateGigDetailsLogic}
+            />
+
+            <ChangePasswordModal
+                isOpen={showChangePassword}
+                onClose={() => setShowChangePassword(false)}
             />
 
             {showImport && (
@@ -1264,7 +1379,7 @@ export default function App() {
                     if (exists) {
                         handleUpdateSongWrapper(updatedSong);
                     } else {
-                        addSongsToLibrary([updatedSong]);
+                        upsertSongs([updatedSong]);
                     }
                 }}
                 existingSongs={songs}
@@ -1281,6 +1396,26 @@ export default function App() {
                     setShowEditingGig(false);
                 }}
             />
+
+            {/* Dashboard Edit Gig Modal */}
+            <EditGigModal
+                isOpen={!!dashboardEditGig}
+                onClose={() => setDashboardEditGig(null)}
+                gigDetails={dashboardEditGig ? {
+                    ...dashboardEditGig,
+                    startTime: dashboardEditGig.settings?.startTime,
+                    arriveTime: dashboardEditGig.settings?.arriveTime,
+                    notes: dashboardEditGig.settings?.notes,
+                    settings: dashboardEditGig.settings
+                } : {} as any}
+                onSave={async (details) => {
+                    if (dashboardEditGig) {
+                        await updateGig(dashboardEditGig.id, details);
+                        setDashboardEditGig(null);
+                    }
+                }}
+            />
+
             <BandSettingsModal isOpen={showBandSettings} onClose={() => setShowBandSettings(false)} settings={bandSettings} onSave={handleSaveBandSettingsLogic} onApplyProfile={(u) => updateBandSettings({ ...bandSettings, ...u })} onApplyGigDetails={handleUpdateGigDetailsLogic} />
 
         </div>

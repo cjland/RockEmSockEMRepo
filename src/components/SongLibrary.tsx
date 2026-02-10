@@ -6,11 +6,14 @@ import { formatDuration, generateCSV } from '../utils';
 
 interface SongLibraryProps {
   songs: Song[];
+  sets: SetList[]; // Add sets to props interface
   usedInSetsMap: Record<string, { name: string, index: number }[]>;
   onPlaySong: (song: Song) => void;
   onUpdateSong: (song: Song) => void;
   onEditSong: (song: Song) => void;
-  onAddToSet: (song: Song) => void;
+  onAddToSet: (song: Song, targetSetId?: string) => void;
+  onManageSongs: () => void;
+  viewOptions: { showRatings: boolean, showLiveBadges: boolean };
 }
 
 const RatingStars = ({ count }: { count?: number }) => (
@@ -29,7 +32,7 @@ interface DraggableLibrarySongProps {
   song: Song;
   sets: SetList[];
   usedInSets: { name: string, index: number }[];
-  viewOptions: { showRating: boolean, showLive: boolean };
+  viewOptions: { showRatings: boolean, showLiveBadges: boolean };
   onAddToSet: (song: Song, setId?: string) => void;
   onPlaySong: (song: Song) => void;
   onEditSong: (song: Song) => void;
@@ -82,7 +85,16 @@ const DraggableLibrarySong: React.FC<DraggableLibrarySongProps> = ({
           </div>
 
           {/* Artist */}
-          <div className="text-xs text-zinc-500 truncate pl-6 mb-2 group-hover:text-zinc-400 transition-colors">{song.artist}</div>
+          <div className="text-xs text-zinc-500 truncate pl-6 mb-1 group-hover:text-zinc-400 transition-colors">{song.artist}</div>
+
+          {/* Song Notes */}
+          {song.generalNotes && (
+            <div className="text-[10px] text-yellow-500/80 italic pl-6 mb-2 truncate group-hover:text-yellow-400 transition-colors">
+              <span className="opacity-50 mr-1">📝</span>{song.generalNotes}
+            </div>
+          )}
+
+          {!song.generalNotes && <div className="mb-2"></div>}
 
           {/* Badges/Metadata */}
           <div className="pl-6 flex flex-wrap gap-2 items-center">
@@ -90,7 +102,7 @@ const DraggableLibrarySong: React.FC<DraggableLibrarySongProps> = ({
               {formatDuration(song.durationSeconds)}
             </span>
 
-            {viewOptions.showRating && (
+            {viewOptions.showRatings && (
               <div className="flex items-center gap-1 bg-black/20 px-1.5 py-0.5 rounded border border-white/5" title="Rating">
                 <RatingStars count={song.rating} />
               </div>
@@ -102,7 +114,7 @@ const DraggableLibrarySong: React.FC<DraggableLibrarySongProps> = ({
               </span>
             )}
 
-            {viewOptions.showLive && song.playedLive && (
+            {viewOptions.showLiveBadges && song.playedLive && (
               <span className="text-[10px] font-bold text-green-500 flex items-center gap-1 bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20 shadow-[0_0_10px_rgba(34,197,94,0.1)]">
                 <Icons.Check size={8} /> Live
               </span>
@@ -122,60 +134,60 @@ const DraggableLibrarySong: React.FC<DraggableLibrarySongProps> = ({
         </div>
 
         {/* Actions Column */}
-        <div className="flex flex-col gap-2 shrink-0 transition-opacity duration-200">
-          {/* Add Button with Set Logic */}
-          <div className="relative group/add">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                // If only 1 set (or 0, though parent handles 0 check), add directly.
-                if (sets.length <= 1) {
-                  onAddToSet(song, sets[0]?.id);
-                }
-              }}
-              className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 hover:text-primary transition-all hover:scale-110"
-              title="Add to Set"
-            >
-              <Icons.Plus size={16} />
-            </button>
-
-            {/* Popover for multiple sets - Positioned leftwards since we are on the right edge */}
-            {sets.length > 1 && (
-              <div className="absolute right-full top-0 mr-1 w-32 py-1 rounded-xl bg-[#18181b] border border-white/10 shadow-xl opacity-0 invisible group-hover/add:opacity-100 group-hover/add:visible transition-all z-50 flex flex-col overflow-hidden">
-                <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-zinc-500 bg-white/5">Add to:</div>
-                {sets.map(set => (
-                  <button
-                    key={set.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddToSet(song, set.id);
-                    }}
-                    className="px-3 py-2 text-left text-xs text-zinc-300 hover:text-white hover:bg-white/10 flex items-center gap-2"
-                  >
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: set.color || '#3b82f6' }}></span>
-                    <span className="truncate">{set.name}</span>
-                  </button>
-                ))}
+        <div className="flex flex-col gap-1 shrink-0 transition-opacity duration-200 w-[68px] items-end">
+          {/* Add Buttons Grid */}
+          <div className="grid grid-cols-2 gap-1 w-full justify-items-end">
+            {sets.length > 0 ? (
+              sets.map((set, index) => (
+                <button
+                  key={set.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddToSet(song, set.id);
+                  }}
+                  className="px-1 py-1 rounded-md text-[9px] font-bold text-green-400 bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 hover:border-green-500/30 transition-all hover:scale-105 flex items-center justify-between w-full whitespace-nowrap gap-1 shadow-[0_0_10px_rgba(34,197,94,0.1)]"
+                  title={`Add to ${set.name}`}
+                  style={{ color: set.color }}
+                >
+                  <span>S{index + 1}</span>
+                  <Icons.Plus size={10} className="text-green-400" />
+                </button>
+              ))
+            ) : (
+              <div className="col-span-2 flex justify-end">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddToSet(song);
+                  }}
+                  className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-primary transition-all hover:scale-110"
+                  title="Add to New Set"
+                >
+                  <Icons.Plus size={14} />
+                </button>
               </div>
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlaySong(song); }}
-            className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 hover:text-red-400 transition-all hover:scale-110"
-            title="Play Video"
-          >
-            <Icons.Play size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEditSong(song); }}
-            className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 hover:text-blue-400 transition-all hover:scale-110"
-            title="Details & Edit"
-          >
-            <Icons.Info size={16} />
-          </button>
+          {/* Action Icons Row */}
+          <div className="flex gap-1 justify-end mt-0.5">
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlaySong(song); }}
+              className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-red-400 transition-all hover:scale-110"
+              title="Play Video"
+            >
+              <Icons.Play size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEditSong(song); }}
+              className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-blue-400 transition-all hover:scale-110"
+              title="Details & Edit"
+            >
+              <Icons.Info size={14} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -189,16 +201,12 @@ export const SongLibrary: React.FC<SongLibraryProps> = ({
   onPlaySong,
   onUpdateSong,
   onEditSong,
-  onAddToSet
+  onAddToSet,
+  onManageSongs,
+  viewOptions
 }) => {
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'title-asc' | 'title-desc' | 'artist-asc' | 'artist-desc' | 'duration-asc' | 'duration-desc'>('title-asc');
-
-  const [viewOptions, setViewOptions] = useState({
-    showRating: true,
-    showLive: true
-  });
-  const [showViewMenu, setShowViewMenu] = useState(false);
+  const [sortBy, setSortBy] = useState<'title-asc' | 'title-desc' | 'artist-asc' | 'artist-desc' | 'duration-asc' | 'duration-desc' | 'rating-asc' | 'rating-desc'>('title-asc');
 
   // New Filters
   const [hideUsed, setHideUsed] = useState(false);
@@ -230,6 +238,8 @@ export const SongLibrary: React.FC<SongLibraryProps> = ({
         case 'title-desc': return b.title.localeCompare(a.title);
         case 'artist-asc': return a.artist.localeCompare(b.artist);
         case 'artist-desc': return b.artist.localeCompare(a.artist);
+        case 'rating-desc': return (b.rating || 0) - (a.rating || 0);
+        case 'rating-asc': return (a.rating || 0) - (b.rating || 0);
         case 'duration-asc': return a.durationSeconds - b.durationSeconds;
         case 'duration-desc': return b.durationSeconds - a.durationSeconds;
         default: return 0;
@@ -268,31 +278,7 @@ export const SongLibrary: React.FC<SongLibraryProps> = ({
             >
               <Icons.Sheet size={16} />
             </button>
-
-            {/* Gear Menu */}
-            <div className="relative">
-              <button
-                onClick={() => setShowViewMenu(!showViewMenu)}
-                className={`p-2 rounded-full transition-colors ${showViewMenu ? 'text-white bg-zinc-800' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
-              >
-                <Icons.Settings size={18} />
-              </button>
-
-              {showViewMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-[#121215] border border-white/10 rounded-xl shadow-2xl z-50 p-2 backdrop-blur-xl animate-fade-in">
-                  <div className="text-xs font-bold text-zinc-500 px-2 py-1 uppercase tracking-wider">View Options</div>
-                  <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded-lg cursor-pointer text-sm text-zinc-300 transition-colors">
-                    <input type="checkbox" checked={viewOptions.showRating} onChange={e => setViewOptions({ ...viewOptions, showRating: e.target.checked })} className="rounded bg-zinc-700 text-primary focus:ring-primary/50" />
-                    Show Ratings
-                  </label>
-                  <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded-lg cursor-pointer text-sm text-zinc-300 transition-colors">
-                    <input type="checkbox" checked={viewOptions.showLive} onChange={e => setViewOptions({ ...viewOptions, showLive: e.target.checked })} className="rounded bg-zinc-700 text-primary focus:ring-primary/50" />
-                    Show Live Badge
-                  </label>
-                  <div className="h-px bg-white/10 my-1"></div>
-                </div>
-              )}
-            </div>
+            {/* Gear Menu removed - controlled globally */}
           </div>
         </div>
 
@@ -329,12 +315,14 @@ export const SongLibrary: React.FC<SongLibraryProps> = ({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-2 text-xs text-zinc-300 focus:outline-none focus:border-primary/50 focus:bg-black/40 appearance-none transition-all cursor-pointer"
+              className="w-full bg-zinc-800 border border-white/10 rounded-lg py-2 px-2 text-xs text-zinc-300 focus:outline-none focus:border-primary/50 focus:bg-black/40 appearance-none transition-all cursor-pointer"
             >
               <option value="title-asc">Title (A-Z)</option>
               <option value="title-desc">Title (Z-A)</option>
               <option value="artist-asc">Artist (A-Z)</option>
               <option value="artist-desc">Artist (Z-A)</option>
+              <option value="rating-desc">Rating (High to Low)</option>
+              <option value="rating-asc">Rating (Low to High)</option>
               <option value="duration-asc">Time (Shortest)</option>
               <option value="duration-desc">Time (Longest)</option>
             </select>
@@ -345,15 +333,24 @@ export const SongLibrary: React.FC<SongLibraryProps> = ({
 
       <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
         {filteredSongs.length === 0 ? (
-          <div className="text-center p-8 text-zinc-600 flex flex-col items-center">
-            <Icons.Music size={32} className="opacity-20 mb-2" />
-            <p className="text-sm">No songs found.</p>
-            {songs.length === 0 && (
-              <div className="mt-4">
-                <p className="text-xs text-zinc-500 mb-3">
-                  Use the <Icons.Download size={12} className="inline mx-1" /> button in the top header to import songs.
+          <div className="text-center p-8 text-zinc-600 flex flex-col items-center animate-fade-in">
+            <Icons.Music size={32} className="opacity-20 mb-3" />
+            <p className="text-sm font-medium mb-1">No songs found.</p>
+            {songs.length === 0 ? (
+              <div className="mt-4 flex flex-col items-center">
+                <p className="text-xs text-zinc-500 mb-3 max-w-[200px] leading-relaxed">
+                  Your library is empty. Add songs to your Master Library to start building sets.
                 </p>
+                <button
+                  onClick={onManageSongs}
+                  className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold transition-all border border-white/5 hover:border-white/10"
+                >
+                  <Icons.Music size={12} />
+                  Go to Master Library
+                </button>
               </div>
+            ) : (
+              <p className="text-xs text-zinc-500 mt-2">Try adjusting your search or filters.</p>
             )}
           </div>
         ) : (

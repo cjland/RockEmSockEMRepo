@@ -15,7 +15,11 @@ export interface Song {
   status: 'Active' | 'Archived'; // New soft-delete flag
   guitarLessonUrl?: string;
   bassLessonUrl?: string;
-  lyricsUrl?: string;
+  lyricsUrl?: string; // Existing
+  externalLink1?: string;
+  externalLink2?: string;
+  externalLink3?: string;
+  externalLink4?: string;
 
   // Latest updates
   generalNotes?: string;
@@ -59,11 +63,17 @@ export interface GigDetails {
 
 export interface BandSettings {
   name: string;
-  logoUrl: string;
-  members: string[]; // List of names
-  defaultLibraryUrl?: string; // URL to fetch initial library from (e.g. Google Sheets)
-  bandProfileUrl?: string; // URL to fetch band profile info
-  gigDetailsUrl?: string; // URL to fetch gig details
+  website?: string;
+  logoUrl?: string; // We can use this for the band logo
+  accessCode: string; // "Shared Password" for read-only access
+  adminPassword?: string; // Optional admin password
+  members: string[]; // List of member names
+}
+
+export interface SetSummary {
+  name: string;
+  songCount: number;
+  durationSeconds: number;
 }
 
 export interface Gig {
@@ -74,6 +84,7 @@ export interface Gig {
   location: string;
   status: 'upcoming' | 'past';
   settings?: any;
+  setSummaries?: SetSummary[];
 }
 
 export interface PDFOptions {

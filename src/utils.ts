@@ -75,12 +75,14 @@ export const transformGoogleSheetUrl = (url: string): string => {
  */
 export const generateCSV = (songs: Song[]): string => {
   const headers = [
-    'Title', 'Artist', 'Duration (Seconds)', 'Video URL',
+    'ID', 'Title', 'Artist', 'Duration (Seconds)', 'Video URL',
     'Rating', 'Played Live',
     'Guitar Lesson', 'Bass Lesson', 'Lyrics',
+    'External Link 1', 'External Link 2', 'External Link 3', 'External Link 4',
     'Status', 'General Notes'
   ];
   const rows = songs.map(song => [
+    song.id,
     `"${song.title.replace(/"/g, '""')}"`,
     `"${song.artist.replace(/"/g, '""')}"`,
     song.durationSeconds,
@@ -90,6 +92,10 @@ export const generateCSV = (songs: Song[]): string => {
     song.guitarLessonUrl || '',
     song.bassLessonUrl || '',
     song.lyricsUrl || '',
+    song.externalLink1 || '',
+    song.externalLink2 || '',
+    song.externalLink3 || '',
+    song.externalLink4 || '',
     song.practiceStatus || 'Ready',
     `"${(song.generalNotes || '').replace(/"/g, '""')}"`
   ]);
@@ -137,13 +143,16 @@ export const parseCSV = (text: string): Song[] => {
 
   for (let i = 1; i < lines.length; i++) {
     const values = parseLine(lines[i]);
-    const song: any = { id: uuidv4() };
+    const song: any = {};
 
     headers.forEach((header, index) => {
       const val = values[index] || '';
 
+      // ID
+      if (header === 'id') song.id = val;
+
       // Basic Info
-      if (header.includes('title') || header.includes('song')) song.title = val;
+      else if (header.includes('title') || header.includes('song')) song.title = val;
       else if (header.includes('artist') || header.includes('band')) song.artist = val;
 
       // Metrics
@@ -159,12 +168,20 @@ export const parseCSV = (text: string): Song[] => {
       else if (header.includes('guitar')) song.guitarLessonUrl = val;
       else if (header.includes('bass')) song.bassLessonUrl = val;
       else if (header.includes('lyrics')) song.lyricsUrl = val;
+
+      // External Bank Links
+      else if (header.includes('external link 1')) song.externalLink1 = val;
+      else if (header.includes('external link 2')) song.externalLink2 = val;
+      else if (header.includes('external link 3')) song.externalLink3 = val;
+      else if (header.includes('external link 4')) song.externalLink4 = val;
+
       // Generic Video/URL last
       else if (header.includes('video') || header.includes('link') || header === 'url') song.videoUrl = val;
     });
 
     // Validations
     if (song.title) {
+      if (!song.id) song.id = uuidv4(); // Generate ID if missing
       if (!song.artist) song.artist = 'Unknown Artist';
       if (typeof song.durationSeconds !== 'number') song.durationSeconds = 0;
       if (!song.practiceStatus) song.practiceStatus = 'Ready';
@@ -474,6 +491,16 @@ const loadImage = (url: string): Promise<string | null> => {
   });
 };
 
+export const formatTime12Hour = (time24: string): string => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return time24;
+
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
 export const generatePDFDoc = async (
   sets: SetList[],
   gigDetails: GigDetails,
@@ -485,6 +512,7 @@ export const generatePDFDoc = async (
   let yPos = 20;
 
   // --- Header ---
+  let logoAdded = false;
   if (options.includeLogo && bandSettings?.logoUrl) {
     try {
       const logoData = await loadImage(bandSettings.logoUrl);
@@ -492,20 +520,31 @@ export const generatePDFDoc = async (
         // Adjust logo size and position
         doc.addImage(logoData, 'PNG', 14, 10, 25, 25, undefined, 'FAST');
         yPos = 40;
+        logoAdded = true;
       }
     } catch (e) {
       console.error("Failed to add logo to PDF", e);
     }
   }
 
-  const titleX = (options.includeLogo && bandSettings?.logoUrl) ? 45 : 14;
+  const titleX = logoAdded ? 45 : 14;
+
+  // Band Name (Small, Above Title)
+  if (bandSettings?.name) {
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.setFont("helvetica", "bold");
+    doc.text(bandSettings.name.toUpperCase(), titleX, 15);
+  }
 
   doc.setFontSize(22);
+  doc.setTextColor(0); // Reset to black
+  doc.setFont("helvetica", "normal");
   // Use Gig Name or Band Name if Gig Name is missing
-  const headerTitle = gigDetails.name || bandSettings?.name || "Set List";
-  doc.text(headerTitle, titleX, (options.includeLogo && bandSettings?.logoUrl) ? 20 : 20);
+  const headerTitle = gigDetails.name || "Set List";
+  doc.text(headerTitle, titleX, 23); // Shifted down to make room for band name
 
-  let currentHeaderY = (options.includeLogo && bandSettings?.logoUrl) ? 28 : 28;
+  let currentHeaderY = 32; // Shifted down
 
   if (options.includeGigInfo) {
     doc.setFontSize(10);
@@ -513,27 +552,30 @@ export const generatePDFDoc = async (
     doc.setFont("helvetica", "normal");
     const details = [
       gigDetails.location && `Location: ${gigDetails.location}`,
-      gigDetails.date && `Date: ${gigDetails.date}`,
-      gigDetails.arriveTime && `Arrive: ${gigDetails.arriveTime}`,
-      gigDetails.startTime && `Start: ${gigDetails.startTime}`
+      gigDetails.date && `Date: ${new Date(gigDetails.date).toLocaleDateString()}`,
+      gigDetails.arriveTime && `Arrive: ${formatTime12Hour(gigDetails.arriveTime)}`,
+      gigDetails.startTime && `Start: ${formatTime12Hour(gigDetails.startTime)}`
     ].filter(Boolean).join(' | ');
 
-    doc.text(details, titleX, currentHeaderY);
-    currentHeaderY += 6;
+    if (details) {
+      doc.text(details, titleX, currentHeaderY);
+      currentHeaderY += 6;
+    }
   }
 
-  // Include Gig Notes if present
+  // Header Line 2: Notes
   if (options.includeGigInfo && gigDetails.notes) {
-    doc.setFontSize(9);
+    doc.setFontSize(10);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(80);
 
-    // Wrap text to avoid overflow
     const maxNoteWidth = pageWidth - titleX - 14;
     const splitNotes = doc.splitTextToSize(gigDetails.notes, maxNoteWidth);
     doc.text(splitNotes, titleX, currentHeaderY);
 
-    currentHeaderY += (splitNotes.length * 4) + 2;
+    currentHeaderY += (splitNotes.length * 4) + 6;
+  } else {
+    currentHeaderY += 6;
   }
 
   // Ensure the set list table starts below the header content
@@ -563,26 +605,33 @@ export const generatePDFDoc = async (
     doc.setFont("helvetica", "bold");
 
     const setName = set.name || `Set ${i + 1}`;
-    doc.text(`${setName} (${formatDurationHuman(totalDuration)})`, 14, yPos);
+    let setTitle = `${setName} (${formatDurationHuman(totalDuration)})`;
+
+    // Add Set Status to the end
+    if (set.status) {
+      setTitle += ` - ${set.status}`; // Proposed/Final/Draft
+    }
+
+    doc.text(setTitle, 14, yPos);
     yPos += options.largeType ? 8 : 5;
 
-    // Table Columns
-    const head = [['#', 'Song', 'Artist', 'Time']];
-    if (options.includeNotes) head[0].push('Notes');
+    // Table Columns: #, Song, Artist, Time, Notes
+    const head = [['#', 'Song', 'Artist', 'Time', 'Notes']];
 
+    // Explicit 5-column body structure
     const body = set.songs.map((s, idx) => {
-      const row = [
+      // Append status to title
+      let songTitle = s.title;
+      if (s.practiceStatus === 'Practice') songTitle += ' [PRACTICE]';
+      if (s.playedLive) songTitle += ' [LIVE]';
+
+      return [
         idx + 1,
-        idx + 1,
-        s.practiceStatus === 'Practice' ? `[PRACTICE] ${s.title}` : s.title,
+        songTitle,
         s.artist,
-        formatDuration(s.durationSeconds)
+        formatDuration(s.durationSeconds),
+        [s.notes, s.generalNotes].filter(Boolean).join(' | ') // Combine notes
       ];
-      if (options.includeNotes) {
-        const notes = [s.notes, s.generalNotes].filter(Boolean).join(' | ');
-        row.push(notes);
-      }
-      return row;
     });
 
     autoTable(doc, {
@@ -596,10 +645,11 @@ export const generatePDFDoc = async (
         cellPadding: options.largeType ? 3 : 2
       },
       columnStyles: {
-        0: { cellWidth: options.largeType ? 15 : 10 },
-        1: { fontStyle: 'bold' },
-        3: { cellWidth: options.largeType ? 25 : 20 },
-        4: { cellWidth: 'auto', fontStyle: 'italic', textColor: [100, 100, 100] }
+        0: { cellWidth: options.largeType ? 15 : 10 }, // #
+        1: { fontStyle: 'bold' },                      // Song
+        2: { cellWidth: 'auto' },                     // Artist
+        3: { cellWidth: options.largeType ? 25 : 20 }, // Time
+        4: { cellWidth: 'auto', fontStyle: 'italic', textColor: [100, 100, 100] } // Notes
       },
       margin: { left: 14, right: 14 }
     });
@@ -617,6 +667,20 @@ export const MOCK_SONGS: Song[] = [
   { id: '3', title: 'Sweet Child O\' Mine', artist: 'Guns N\' Roses', durationSeconds: 356, videoUrl: 'https://www.youtube.com/watch?v=1w7OgIMMRc4', rating: 5, playedLive: false, practiceStatus: 'Practice', createdAt: '2023-03-10T09:15:00Z', status: 'Active' },
   { id: '4', title: 'Stairway to Heaven', artist: 'Led Zeppelin', durationSeconds: 482, videoUrl: 'https://www.youtube.com/watch?v=xbhCPt6PZIU', rating: 5, playedLive: false, practiceStatus: 'Practice', createdAt: '2023-04-05T16:45:00Z', status: 'Active' },
   { id: '5', title: 'Smells Like Teen Spirit', artist: 'Nirvana', durationSeconds: 301, videoUrl: 'https://www.youtube.com/watch?v=hTWKbfoikeg', rating: 4, playedLive: true, practiceStatus: 'Ready', createdAt: '2023-05-12T11:20:00Z', status: 'Active' },
+  {
+    id: '6', title: 'Blister in the Sun', artist: 'Violent Femmes', durationSeconds: 145,
+    videoUrl: 'https://www.youtube.com/watch?v=2aljlKYesT4',
+    externalLink1: 'https://example.com/v1',
+    externalLink2: 'https://example.com/v2',
+    rating: 5, playedLive: true, practiceStatus: 'Ready', createdAt: '2023-06-01T10:00:00Z', status: 'Active'
+  },
+  {
+    id: '7', title: 'Born to be Wild', artist: 'Steppenwolf', durationSeconds: 210,
+    videoUrl: 'https://www.youtube.com/watch?v=rMbATaj7Il8',
+    guitarLessonUrl: 'https://youtu.be/lesson',
+    externalLink1: 'https://example.com/v1',
+    rating: 4, playedLive: false, practiceStatus: 'Practice', createdAt: '2023-06-02T14:00:00Z', status: 'Active'
+  },
 ];
 
 export const DEFAULT_LIBRARY_URL = 'https://docs.google.com/spreadsheets/d/1m8sg7CRO4-ZpYp4UYatVHak7lqgRpRydc9pKGz9t7DY/edit?usp=sharing';

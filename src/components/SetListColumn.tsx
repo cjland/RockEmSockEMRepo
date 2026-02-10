@@ -6,6 +6,19 @@ import { SetList, SetSong, SetStatus, Song } from '../types';
 import { Icons } from './ui/Icons';
 import { formatDuration, formatDurationHuman } from '../utils';
 
+// Helper for Stars
+const RatingStars = ({ count }: { count?: number }) => (
+  <div className="flex text-yellow-500">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <Icons.Star
+        key={i}
+        size={10}
+        className={i <= (count || 0) ? 'fill-current drop-shadow-sm' : 'text-zinc-700 fill-zinc-800'}
+      />
+    ))}
+  </div>
+);
+
 interface SetListColumnProps {
   setList: SetList;
   setIndex: number;
@@ -13,11 +26,13 @@ interface SetListColumnProps {
   bandMembers?: string[];
   duplicateSongIds: string[];
   onRemoveSet: (id: string) => void;
+  onDuplicateSet: (id: string) => void;
   onRemoveSong: (setId: string, songInstanceId: string) => void;
   onUpdateNote: (setId: string, songInstanceId: string, note: string) => void;
   onPlaySong: (song: SetSong) => void;
   onUpdateSetDetails: (setId: string, updates: Partial<SetList>) => void;
   onEditSong: (song: Song) => void;
+  viewOptions: { showRatings: boolean, showLiveBadges: boolean };
 }
 
 interface SortableSetSongProps {
@@ -29,9 +44,10 @@ interface SortableSetSongProps {
   onUpdateNote: (note: string) => void;
   onPlay: () => void;
   onEdit: () => void;
+  viewOptions: { showRatings: boolean, showLiveBadges: boolean };
 }
 
-const SortableSetSong: React.FC<SortableSetSongProps> = ({ song, setId, index, isDuplicate, onRemove, onUpdateNote, onPlay, onEdit }) => {
+const SortableSetSong: React.FC<SortableSetSongProps> = ({ song, setId, index, isDuplicate, onRemove, onUpdateNote, onPlay, onEdit, viewOptions }) => {
   const {
     attributes,
     listeners,
@@ -51,7 +67,7 @@ const SortableSetSong: React.FC<SortableSetSongProps> = ({ song, setId, index, i
   };
 
   const [isEditingNote, setIsEditingNote] = React.useState(false);
-  const [noteDraft, setNoteDraft] = React.useState(song.notes || '');
+  const [noteDraft, setNoteDraft] = React.useState(song.notes || song.generalNotes || '');
 
   // Construct tooltip content
   const tooltipContent = [
@@ -85,73 +101,92 @@ const SortableSetSong: React.FC<SortableSetSongProps> = ({ song, setId, index, i
           <Icons.Grip size={16} />
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <div className="flex items-center gap-2 overflow-hidden min-w-0">
-              <h4 className="font-medium text-sm text-zinc-300 truncate group-hover:text-white transition-colors">
-                <span className="text-zinc-500 font-mono text-xs mr-1">{index + 1}.</span>
-                {song.title}
-              </h4>
-              {isPractice && (
-                <span className="text-[10px] font-bold text-red-500 flex items-center gap-1 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20 mx-1">
-                  <Icons.Warning size={8} /> Practice
-                </span>
-              )}
-              {isDuplicate && (
-                <Icons.Duplicate size={12} className="text-yellow-500 shrink-0 animate-pulse" title="Song appears in multiple sets" />
-              )}
+        <div className="flex flex-col gap-1 w-full">
+          {/* Top Row: Title and Time */}
+          <div className="flex justify-between items-start gap-2">
+            <h4 className="font-medium text-sm text-zinc-300 break-words leading-snug group-hover:text-white transition-colors">
+              <span className="text-zinc-500 font-mono text-xs mr-1 select-none">{index + 1}.</span>
+              {song.title}
+            </h4>
+
+            {/* Time Badge - Pinned Top Right */}
+            <span className="text-[10px] font-mono font-bold text-zinc-500 bg-black/40 px-1.5 py-0.5 rounded border border-white/5 group-hover:text-zinc-300 transition-colors shrink-0 mt-0.5">
+              {formatDuration(song.durationSeconds)}
+            </span>
+          </div>
+
+          {/* Bottom Row: Artist, Badges, Icons */}
+          <div className="flex items-end justify-between gap-2">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-zinc-600 truncate group-hover:text-zinc-500 transition-colors">{song.artist}</p>
+                {/* Rating Stars (if enabled) */}
+                {viewOptions.showRatings && (
+                  <div className="flex items-center gap-0.5" title="Rating">
+                    <RatingStars count={song.rating} />
+                  </div>
+                )}
+              </div>
+
+              {/* Status Badges */}
+              <div className="flex items-center gap-1 flex-wrap">
+                {viewOptions.showLiveBadges && song.playedLive && (
+                  <span className="text-[9px] font-bold text-green-400 flex items-center gap-0.5 bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20 shadow-[0_0_8px_rgba(34,197,94,0.1)] uppercase tracking-wider">
+                    Live
+                  </span>
+                )}
+                {isPractice && (
+                  <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20 animate-pulse uppercase tracking-wider">
+                    <Icons.Warning size={9} /> Practice
+                  </span>
+                )}
+                {isDuplicate && (
+                  <Icons.Duplicate size={12} className="text-yellow-500 shrink-0 animate-pulse" title="Song appears in multiple sets" />
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Time with dark background */}
-              <span className="text-[10px] font-mono font-bold text-zinc-500 bg-black/40 px-1.5 py-0.5 rounded border border-white/5 group-hover:text-zinc-300 transition-colors">
-                {formatDuration(song.durationSeconds)}
-              </span>
-
-              {/* Action Icons - Horizontal Row */}
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-200">
+            {/* Action Icons - Horizontal Row */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onPlay(); }}
+                className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-red-400 transition-colors hover:scale-110"
+                title="Play Video"
+              >
+                <Icons.Play size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-blue-400 transition-colors hover:scale-110"
+                title="Song Info"
+              >
+                <Icons.Info size={14} />
+              </button>
+              {!song.notes && !isEditingNote && (
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); onPlay(); }}
-                  className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-red-400 transition-colors hover:scale-110"
-                  title="Play Video"
+                  onClick={(e) => { e.stopPropagation(); setIsEditingNote(true); }}
+                  className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-green-400 transition-colors hover:scale-110"
+                  title="Add Note"
                 >
-                  <Icons.Play size={14} />
+                  <Icons.File size={14} />
                 </button>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                  className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-blue-400 transition-colors hover:scale-110"
-                  title="Song Info"
-                >
-                  <Icons.Info size={14} />
-                </button>
-                {!song.notes && !isEditingNote && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setIsEditingNote(true); }}
-                    className="p-1 rounded-md hover:bg-white/10 text-zinc-500 hover:text-green-400 transition-colors hover:scale-110"
-                    title="Add Note"
-                  >
-                    <Icons.File size={14} />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                  className="p-1 text-zinc-500 hover:text-red-400 hover:bg-white/10 rounded-md transition-colors hover:scale-110"
-                  title="Remove from set"
-                >
-                  <Icons.Trash size={14} />
-                </button>
-              </div>
+              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onRemove(); }}
+                className="p-1 text-zinc-500 hover:text-red-400 hover:bg-white/10 rounded-md transition-colors hover:scale-110"
+                title="Remove from set"
+              >
+                <Icons.Trash size={14} />
+              </button>
             </div>
           </div>
 
-          <p className="text-xs text-zinc-600 truncate group-hover:text-zinc-500 transition-colors">{song.artist}</p>
-
           {/* Quick Edit Note Area */}
-          <div className="mt-1 min-h-[16px]">
+          <div className="min-h-[16px]">
             {isEditingNote ? (
               <input
                 type="text"
@@ -173,13 +208,13 @@ const SortableSetSong: React.FC<SortableSetSongProps> = ({ song, setId, index, i
                 }}
               />
             ) : (
-              song.notes && (
+              (song.notes || song.generalNotes) && (
                 <div
                   onClick={(e) => { e.stopPropagation(); setIsEditingNote(true); }}
-                  className="text-xs text-secondary/80 italic cursor-pointer hover:underline truncate hover:text-secondary transition-colors"
-                  title="Click to edit note"
+                  className={`text-xs italic cursor-pointer hover:underline transition-colors break-words ${song.notes ? 'text-yellow-500/80 hover:text-yellow-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title={song.notes ? "Edit note" : "Global Note (Click to convert to Set Note)"}
                 >
-                  {song.notes}
+                  <span className="opacity-50 mr-1">{song.notes ? '📝' : 'ℹ️'}</span>{song.notes || song.generalNotes}
                 </div>
               )
             )}
@@ -197,11 +232,13 @@ export const SetListColumn: React.FC<SetListColumnProps> = ({
   bandMembers = [],
   duplicateSongIds,
   onRemoveSet,
+  onDuplicateSet,
   onRemoveSong,
   onUpdateNote,
   onPlaySong,
   onUpdateSetDetails,
-  onEditSong
+  onEditSong,
+  viewOptions
 }) => {
   // Sortable Logic for the Column itself
   const {
@@ -233,7 +270,7 @@ export const SetListColumn: React.FC<SetListColumnProps> = ({
     switch (s) {
       case 'Final': return 'text-green-400 border-green-500/30 bg-green-500/10 shadow-[0_0_10px_rgba(34,197,94,0.1)]';
       case 'Proposed': return 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10 shadow-[0_0_10px_rgba(234,179,8,0.1)]';
-      default: return 'text-zinc-500 border-white/5 bg-zinc-800/50';
+      default: return 'text-zinc-500 border-white/5 bg-transparent';
     }
   };
 
@@ -277,6 +314,23 @@ export const SetListColumn: React.FC<SetListColumnProps> = ({
             </datalist>
           </div>
 
+          {/* Duplicate Button */}
+          <button
+            type="button"
+            data-no-dnd="true"
+            className="p-1.5 text-zinc-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-md transition-colors cursor-pointer flex-shrink-0"
+            title="Duplicate Set"
+            onPointerDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onMouseDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDuplicateSet(setList.id);
+            }}
+          >
+            <Icons.Copy size={18} />
+          </button>
+
           {/* Trash Button - Placed directly in flex flow for reliability */}
           <button
             type="button"
@@ -308,7 +362,7 @@ export const SetListColumn: React.FC<SetListColumnProps> = ({
           <select
             value={setList.status || 'Draft'}
             onChange={(e) => onUpdateSetDetails(setList.id, { status: e.target.value as SetStatus })}
-            className={`text-[10px] uppercase font-bold px-2 py-1 rounde-full border outline-none appearance-none cursor-pointer flex-shrink-0 transition-all ${getStatusColor(setList.status)}`}
+            className={`bg-zinc-800 border border-white/10 text-xs rounded px-2 py-1 outline-none appearance-none cursor-pointer hover:bg-zinc-700 transition-colors ${getStatusColor(setList.status)}`}
           >
             <option value="Draft">Draft</option>
             <option value="Proposed">Proposed</option>
@@ -352,6 +406,7 @@ export const SetListColumn: React.FC<SetListColumnProps> = ({
                 onUpdateNote={(note) => onUpdateNote(setList.id, song.instanceId, note)}
                 onPlay={() => onPlaySong(song)}
                 onEdit={() => onEditSong(song)}
+                viewOptions={viewOptions}
               />
             ))
           )}

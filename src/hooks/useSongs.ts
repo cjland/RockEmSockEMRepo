@@ -37,7 +37,11 @@ export function useSongs(profile: any) {
                     createdAt: s.created_at,
                     guitarLessonUrl: s.links?.guitar,
                     bassLessonUrl: s.links?.bass,
-                    lyricsUrl: s.links?.lyrics
+                    lyricsUrl: s.links?.lyrics,
+                    externalLink1: s.links?.externalLink1,
+                    externalLink2: s.links?.externalLink2,
+                    externalLink3: s.links?.externalLink3,
+                    externalLink4: s.links?.externalLink4
                 }));
                 // Combine with Mock if DB is empty? No, DB should be truth.
                 // But for prototype we started with MOCK. 
@@ -55,18 +59,47 @@ export function useSongs(profile: any) {
         fetchSongs();
     }, [profile]);
 
-    const addSongsToLibrary = async (newSongs: Song[]) => {
-        // Enforce createdAt
-        const songsWithDate = newSongs.map(s => ({
-            ...s,
-            createdAt: s.createdAt || new Date().toISOString()
-        }));
+    const upsertSongs = async (newSongs: Partial<Song>[]) => {
+        // Safe Upsert Logic:
+        // 1. If ID matches a song in THIS band -> Update (Merge)
+        // 2. If ID is missing or does NOT match a known song -> Insert (New ID) to prevent overwriting other bands' data
+        const processedSongs = newSongs.map(s => {
+            // Check if this ID exists in our LOCALLY loaded songs (which are filtered by current band)
+            const existing = s.id ? songs.find(local => local.id === s.id) : null;
 
-        // Optimistic
-        setSongs(prev => [...prev, ...songsWithDate]);
+            if (existing) {
+                // UPDATE: Merge new data over existing
+                return {
+                    ...existing,
+                    ...s,
+                    // Prevent changing critical fields if needed, but 's' usually authoritative
+                    band_id: profile.band_id // Ensure band_id sticks
+                } as Song;
+            } else {
+                // INSERT: Treat as new song (New UUID)
+                // This protects against ID collisions with other bands
+                return {
+                    ...s,
+                    id: self.crypto.randomUUID(),
+                    band_id: profile.band_id,
+                    createdAt: s.createdAt || new Date().toISOString(),
+                    status: s.status || 'Active',
+                    // Ensure defaults for required fields if missing in Partial
+                    rating: s.rating || 0,
+                    practiceStatus: s.practiceStatus || 'Practice'
+                } as Song;
+            }
+        });
+
+        // Optimistic: Upsert (Merge)
+        setSongs(prev => {
+            const map = new Map(prev.map(s => [s.id, s]));
+            processedSongs.forEach(s => map.set(s.id, s));
+            return Array.from(map.values());
+        });
 
         if (profile?.band_id) {
-            const dbSongs = songsWithDate.map(s => ({
+            const dbSongs = processedSongs.map(s => ({
                 id: s.id,
                 band_id: profile.band_id,
                 title: s.title,
@@ -78,18 +111,21 @@ export function useSongs(profile: any) {
                 general_notes: s.generalNotes,
                 practice_status: s.practiceStatus,
                 status: s.status,
+                created_at: s.createdAt, // Ensure Created At is persisted
                 links: {
                     guitar: s.guitarLessonUrl,
                     bass: s.bassLessonUrl,
-                    lyrics: s.lyricsUrl
+                    lyrics: s.lyricsUrl,
+                    externalLink1: s.externalLink1,
+                    externalLink2: s.externalLink2,
+                    externalLink3: s.externalLink3,
+                    externalLink4: s.externalLink4
                 }
             }));
-            const { error } = await supabase.from('songs').insert(dbSongs);
+            const { error } = await supabase.from('songs').upsert(dbSongs, { onConflict: 'id' });
             if (error) {
-                console.error("Failed to add songs to DB", error);
+                console.error("Failed to upsert songs to DB", error);
                 alert("Failed to save songs to database! Please check your connection.");
-                // Revert optimistic update?
-                // For now just alert.
             }
         }
     };
@@ -117,7 +153,11 @@ export function useSongs(profile: any) {
                 links: {
                     guitar: s.guitarLessonUrl,
                     bass: s.bassLessonUrl,
-                    lyrics: s.lyricsUrl
+                    lyrics: s.lyricsUrl,
+                    externalLink1: s.externalLink1,
+                    externalLink2: s.externalLink2,
+                    externalLink3: s.externalLink3,
+                    externalLink4: s.externalLink4
                 }
             }));
             const { error } = await supabase.from('songs').insert(dbSongs);
@@ -145,7 +185,11 @@ export function useSongs(profile: any) {
                 links: {
                     guitar: updatedSong.guitarLessonUrl,
                     bass: updatedSong.bassLessonUrl,
-                    lyrics: updatedSong.lyricsUrl
+                    lyrics: updatedSong.lyricsUrl,
+                    externalLink1: updatedSong.externalLink1,
+                    externalLink2: updatedSong.externalLink2,
+                    externalLink3: updatedSong.externalLink3,
+                    externalLink4: updatedSong.externalLink4
                 }
             }).eq('id', updatedSong.id);
 
@@ -184,7 +228,7 @@ export function useSongs(profile: any) {
     return {
         songs,
         loading,
-        addSongsToLibrary,
+        upsertSongs,
         replaceLibrary,
         updateSong,
         deleteSong,

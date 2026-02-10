@@ -39,7 +39,11 @@ import {
   RefreshCw,
   ArrowLeft,
   ArrowRight,
-  Archive
+  Archive,
+  Key,
+  Search,
+  List,
+  Loader2
 } from 'lucide-react';
 
 export const Icons = {
@@ -81,5 +85,9 @@ export const Icons = {
   Globe,
   Refresh: RefreshCw,
   ArrowLeft: ArrowLeft,
-  ArrowRight: ArrowRight
+  ArrowRight: ArrowRight,
+  Key,
+  Search,
+  List,
+  Loader: Loader2
 };

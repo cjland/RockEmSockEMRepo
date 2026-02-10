@@ -5,7 +5,9 @@ import { SetList, SetSong, Song } from '../types';
 import { arrayMove } from '@dnd-kit/sortable';
 import { v4 as uuidv4 } from 'uuid';
 
-export function useSets(profile: any, gigId: string | null) {
+import { UserBand } from '../context/AuthContext';
+
+export function useSets(profile: UserBand | null, gigId: string | null) {
     const [sets, setSets] = useState<SetList[]>([]);
     const [loading, setLoading] = useState(false);
 
@@ -101,7 +103,12 @@ export function useSets(profile: any, gigId: string | null) {
     };
 
     const addSet = async () => {
-        if (sets.length >= 5 || !profile?.band_id || !gigId) return;
+        console.log('[useSets] addSet called. sets:', sets.length, 'band:', profile?.band_id, 'gig:', gigId);
+        if (sets.length >= 5 || !profile?.band_id || !gigId) {
+            console.warn('[useSets] addSet aborted. Condition failed.');
+            alert(`Cannot create set. Debug Info: Sets=${sets.length}, BandID=${profile?.band_id}, GigID=${gigId}`);
+            return;
+        }
 
         const newId = uuidv4();
         const newSetName = `Set ${sets.length + 1}`;
@@ -321,6 +328,72 @@ export function useSets(profile: any, gigId: string | null) {
         }
     };
 
+    const duplicateSet = async (setId: string) => {
+        if (sets.length >= 5) {
+            alert("Maximum 5 sets allowed.");
+            return;
+        }
+
+        const sourceIndex = sets.findIndex(s => s.id === setId);
+        if (sourceIndex === -1) return;
+
+        const sourceSet = sets[sourceIndex];
+        const newSetId = uuidv4();
+
+        // Clone songs with new instance IDs
+        const newSongs = sourceSet.songs.map(s => ({
+            ...s,
+            instanceId: uuidv4()
+        }));
+
+        const newSet: SetList = {
+            ...sourceSet,
+            id: newSetId,
+            name: `${sourceSet.name} (Copy)`,
+            songs: newSongs,
+            status: 'Draft'
+        };
+
+        // Insert after source set
+        const newSets = [...sets];
+        newSets.splice(sourceIndex + 1, 0, newSet);
+
+        // Re-index
+        newSets.forEach((s, i) => s.order_index = i);
+        setSets(newSets);
+
+        if (!profile?.band_id || !gigId) return;
+
+        // 1. Create Set in DB
+        const { error: setError } = await supabase.from('setlists').insert({
+            id: newSet.id,
+            band_id: profile.band_id,
+            gig_id: gigId,
+            name: newSet.name,
+            status: 'Draft',
+            order_index: sourceIndex + 1
+        });
+
+        if (setError) {
+            console.error("Failed to duplicate set", setError);
+            return;
+        }
+
+        // 2. Create Songs
+        await persistSetListSongs(newSet.id, newSongs);
+
+        // 3. Update Order Indexes for all sets to ensure consistency
+        const updates = newSets.map((set, index) => ({
+            id: set.id,
+            band_id: profile.band_id,
+            gig_id: gigId,
+            name: set.name,
+            status: set.status,
+            order_index: index
+        }));
+        await supabase.from('setlists').upsert(updates, { onConflict: 'id' });
+    };
+
     return {
         sets,
         loading,
@@ -335,6 +408,7 @@ export function useSets(profile: any, gigId: string | null) {
         removeSongFromSet,
         updateSongNote,
         updateSongInSets,
-        clearAllSets
+        clearAllSets,
+        duplicateSet
     };
 }

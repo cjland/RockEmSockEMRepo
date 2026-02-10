@@ -1,197 +1,322 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Song } from '../types';
 import { Icons } from './ui/Icons';
-import { formatDuration } from '../utils';
+import { generateCSV } from '../utils';
 
 interface SongManagerProps {
     songs: Song[];
     usedSongIds: Set<string>;
     onBack: () => void;
-    onAddSong: (song: Song) => void;
+    onAddSong: () => void;
     onUpdateSong: (song: Song) => void;
     onDeleteSong: (id: string) => void;
     onImport: () => void;
+    onClearLibrary: () => void;
 }
 
-export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, onBack, onAddSong, onUpdateSong, onDeleteSong, onImport }) => {
-    const [search, setSearch] = useState('');
-    const [sortField, setSortField] = useState<keyof Song>('title');
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-    const [editingId, setEditingId] = useState<string | null>(null);
+const LinkIcon = ({ url, icon, label, text }: { url?: string, icon?: React.ReactNode, label: string, text?: string }) => {
+    if (url) {
+        return (
+            <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center p-1.5 rounded-md bg-green-500/10 text-green-500 hover:bg-green-500/20 hover:text-green-400 transition-all border border-green-500/20"
+                title={`${label}: ${url}`}
+            >
+                {icon || <span className="text-[10px] font-bold font-mono w-5 text-center">{text}</span>}
+            </a>
+        );
+    }
+    return (
+        <span
+            className="flex items-center justify-center p-1.5 rounded-md bg-zinc-800/50 text-zinc-700 border border-white/5 cursor-default"
+            title={`${label} (Not set)`}
+        >
+            {icon || <span className="text-[10px] font-bold font-mono w-5 text-center">{text}</span>}
+        </span>
+    );
+};
 
-    // Initial Empty Row State
-    const [newSong, setNewSong] = useState<Partial<Song>>({
-        title: '',
-        artist: '',
-        durationSeconds: 0,
-        practiceStatus: 'Ready'
+export const SongManager: React.FC<SongManagerProps> = ({ songs, usedSongIds, onBack, onAddSong, onUpdateSong, onDeleteSong, onImport, onClearLibrary }) => {
+    const [search, setSearch] = useState('');
+    const [filter, setFilter] = useState<'ALL' | 'USED' | 'UNUSED'>('ALL');
+    const [sortBy, setSortBy] = useState<'title' | 'artist' | 'rating' | 'date'>('date');
+
+    const filteredSongs = songs.filter(song => {
+        const matchesSearch = song.title.toLowerCase().includes(search.toLowerCase()) || song.artist.toLowerCase().includes(search.toLowerCase());
+        const matchesFilter =
+            filter === 'ALL' ? true :
+                filter === 'USED' ? usedSongIds.has(song.id) :
+                    !usedSongIds.has(song.id);
+        return matchesSearch && matchesFilter;
+    }).sort((a, b) => {
+        if (sortBy === 'title') return a.title.localeCompare(b.title);
+        if (sortBy === 'artist') return a.artist.localeCompare(b.artist);
+        if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
+        if (sortBy === 'date') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        return 0;
     });
 
-    const filteredSongs = useMemo(() => {
-        let result = songs.filter(s =>
-            s.title.toLowerCase().includes(search.toLowerCase()) ||
-            s.artist.toLowerCase().includes(search.toLowerCase())
-        );
-
-        return result.sort((a, b) => {
-            const valA = a[sortField];
-            const valB = b[sortField];
-            if (valA === undefined || valB === undefined) return 0;
-
-            const compare = valA > valB ? 1 : -1;
-            return sortDirection === 'asc' ? compare : -compare;
-        });
-    }, [songs, search, sortField, sortDirection]);
-
-    const handleHeaderClick = (field: keyof Song) => {
-        if (sortField === field) {
-            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-        } else {
-            setSortField(field);
-            setSortDirection('asc');
+    const handleExport = () => {
+        const csv = generateCSV(songs);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'master_song_library.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     };
 
     return (
         <div className="flex flex-col h-screen bg-[#09090b] text-zinc-100 font-sans">
             {/* Header */}
-            <header className="h-16 border-b border-white/5 bg-black/40 backdrop-blur-xl px-6 flex items-center justify-between shrink-0">
+            <div className="p-4 border-b border-white/5 flex items-center justify-between bg-zinc-900/50 backdrop-blur-md sticky top-0 z-10 shrink-0">
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={onBack}
-                        className="p-2 -ml-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-full transition-colors"
-                    >
+                    <button onClick={onBack} className="p-2 -ml-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-full transition-colors">
                         <Icons.ArrowLeft size={20} />
                     </button>
-                    <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-400">
-                        Master Song Library
-                    </h1>
-                    <div className="bg-zinc-800 text-xs px-2 py-1 rounded-full text-zinc-400 border border-white/5">
-                        {songs.length} Songs
+                    <div>
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Icons.Music className="text-indigo-400" />
+                            Master Song Library
+                        </h2>
+                        <p className="text-xs text-zinc-500">{songs.length} total songs</p>
                     </div>
                 </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="relative w-64">
-                        <Icons.Music className="absolute left-3 top-2.5 text-zinc-500" size={14} />
-                        <input
-                            type="text"
-                            placeholder="Search library..."
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            className="w-full bg-zinc-900 border border-white/10 rounded-lg py-2 pl-9 pr-4 text-sm focus:outline-none focus:border-primary/50"
-                        />
-                    </div>
+                <div className="flex gap-2">
                     <button
-                        onClick={onImport}
-                        className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-medium transition-colors border border-white/5"
+                        onClick={onClearLibrary}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-red-900/20 hover:bg-red-600/20 text-red-400 hover:text-red-200 text-sm font-medium rounded-md border border-red-500/20 transition-colors"
+                        title="Delete All Songs"
                     >
-                        <Icons.Download size={16} /> Import CSV
+                        <Icons.Trash size={16} />
                     </button>
                     <button
-                        onClick={() => onAddSong(newSong as Song)}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
+                        onClick={handleExport}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-md border border-white/5 transition-colors"
+                    >
+                        <Icons.Download size={16} className="rotate-180" /> Export CSV
+                    </button>
+                    <button
+                        onClick={onImport}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-md border border-white/5 transition-colors"
+                    >
+                        <Icons.Download size={16} /> Import
+                    </button>
+                    <button
+                        onClick={onAddSong}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-primary hover:bg-indigo-500 text-white text-sm font-bold rounded-md shadow-lg shadow-primary/20 transition-colors"
                     >
                         <Icons.Plus size={16} /> Add Song
                     </button>
                 </div>
-            </header>
+            </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto p-8">
-                <div className="max-w-7xl mx-auto">
-                    <div className="bg-[#121215] border border-white/5 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/5">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-black/40 text-zinc-400 font-medium">
-                                <tr>
-                                    <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleHeaderClick('title')}>Title <Icons.Sort size={12} className="inline ml-1" /></th>
-                                    <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleHeaderClick('artist')}>Artist <Icons.Sort size={12} className="inline ml-1" /></th>
-                                    <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleHeaderClick('rating')}>Rating <Icons.Sort size={12} className="inline ml-1" /></th>
-                                    <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleHeaderClick('durationSeconds')}>Time <Icons.Sort size={12} className="inline ml-1" /></th>
-                                    <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleHeaderClick('createdAt')}>Created <Icons.Sort size={12} className="inline ml-1" /></th>
-                                    <th className="px-6 py-4 cursor-pointer hover:text-white" onClick={() => handleHeaderClick('practiceStatus')}>Status <Icons.Sort size={12} className="inline ml-1" /></th>
-                                    <th className="px-6 py-4">Notes</th>
-                                    <th className="px-6 py-4 text-center">Archive</th>
-                                    <th className="px-6 py-4">Links</th>
-                                    <th className="px-6 py-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5 text-zinc-300">
-                                {filteredSongs.map(song => (
-                                    <tr key={song.id} className={`hover:bg-white/[0.02] transition-colors group ${song.status === 'Archived' ? 'opacity-40 grayscale' : ''}`}>
-                                        <td className="px-6 py-4 font-medium text-white">
-                                            {song.title}
-                                            {song.status === 'Archived' && <span className="ml-2 text-[10px] border border-zinc-700 px-1 rounded text-zinc-500">ARCHIVED</span>}
-                                        </td>
-                                        <td className="px-6 py-4">{song.artist}</td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex text-yellow-500/80">
-                                                {[1, 2, 3, 4, 5].map(i => (
-                                                    <Icons.Star key={i} size={12} className={i <= (song.rating || 0) ? 'fill-current' : 'text-zinc-800 fill-zinc-800'} />
-                                                ))}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 font-mono text-xs text-zinc-500">{formatDuration(song.durationSeconds)}</td>
-                                        <td className="px-6 py-4 text-xs text-zinc-500 whitespace-nowrap">
-                                            {song.createdAt ? new Date(song.createdAt).toLocaleDateString() : '-'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {song.practiceStatus === 'Practice' ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold bg-red-500/10 text-red-500 border border-red-500/20">
-                                                    <Icons.Warning size={10} /> Practice
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold bg-green-500/10 text-green-500 border border-green-500/20">
-                                                    <Icons.Check size={10} /> Ready
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-xs text-zinc-500 max-w-[200px] truncate" title={song.generalNotes}>
-                                            {song.generalNotes || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            {song.status === 'Archived' && (
-                                                <div className="w-2 h-2 bg-yellow-500 rounded-full mx-auto shadow-[0_0_8px_rgba(234,179,8,0.5)]" title="Archived"></div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex gap-2">
-                                                {song.videoUrl && <a href={song.videoUrl} target="_blank" className="p-1 hover:bg-white/10 rounded text-zinc-500 hover:text-red-400" title="YouTube"><Icons.Youtube size={14} /></a>}
-                                                {song.lyricsUrl && <a href={song.lyricsUrl} target="_blank" className="p-1 hover:bg-white/10 rounded text-zinc-500 hover:text-blue-400" title="Lyrics"><Icons.File size={14} /></a>}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => onUpdateSong(song)} className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-md transition-colors" title="Edit"><Icons.Edit size={14} /></button>
-                                                {song.status !== 'Archived' && (
-                                                    <button
-                                                        onClick={() => onDeleteSong(song.id)}
-                                                        className={`p-2 rounded-md transition-colors ${usedSongIds.has(song.id)
-                                                            ? 'text-orange-400 hover:bg-orange-500/10'
-                                                            : 'text-zinc-500 hover:text-red-400 hover:bg-zinc-800'
-                                                            }`}
-                                                        title={usedSongIds.has(song.id) ? "Archive (Used in Sets)" : "Delete Permanently"}
-                                                    >
-                                                        {usedSongIds.has(song.id) ? <Icons.Archive size={14} /> : <Icons.Trash size={14} />}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
+            {/* Empty State Overlay */}
+            {songs.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 animate-fade-in">
+                    <div className="w-24 h-24 rounded-full bg-zinc-800/50 flex items-center justify-center mb-6 border border-white/5">
+                        <Icons.Music size={48} className="text-zinc-600" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Your Library is Empty</h3>
+                    <p className="text-zinc-400 max-w-md mb-8">
+                        Start building your repertoire by adding individual songs or importing a CSV file.
+                    </p>
+                    <div className="flex gap-4">
+                        <button
+                            onClick={onAddSong}
+                            className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-primary/20"
+                        >
+                            <Icons.Plus size={20} />
+                            Add First Song
+                        </button>
+                        <button
+                            onClick={onImport}
+                            className="flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium transition-all border border-white/10"
+                        >
+                            <Icons.Download size={20} />
+                            Import CSV
+                        </button>
+                    </div>
+                    <button
+                        onClick={onBack}
+                        className="mt-8 text-zinc-500 hover:text-zinc-300 text-sm hover:underline transition-all"
+                    >
+                        Go Back
+                    </button>
+                </div>
+            ) : (
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div className="max-w-6xl mx-auto space-y-6">
 
+                        {/* Filters */}
+                        <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-zinc-900/30 p-4 rounded-xl border border-white/5">
+                            <div className="relative w-full md:w-96">
+                                <Icons.Search className="absolute left-3 top-2.5 text-zinc-500" size={16} />
+                                <input
+                                    type="text"
+                                    placeholder="Search songs..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="w-full bg-black/40 border border-zinc-700 rounded-lg py-2 pl-10 pr-4 text-sm text-zinc-200 focus:border-primary outline-none"
+                                />
+                            </div>
+
+                            <div className="flex gap-2 w-full md:w-auto">
+                                <select
+                                    value={filter}
+                                    onChange={(e) => setFilter(e.target.value as any)}
+                                    className="bg-black/40 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-primary"
+                                >
+                                    <option value="ALL">All Songs</option>
+                                    <option value="USED">Used in Sets</option>
+                                    <option value="UNUSED">Unused</option>
+                                </select>
+
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value as any)}
+                                    className="bg-black/40 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 outline-none focus:border-primary"
+                                >
+                                    <option value="date">Date Added (Newest)</option>
+                                    <option value="title">Title (A-Z)</option>
+                                    <option value="artist">Artist (A-Z)</option>
+                                    <option value="rating">Rating (High-Low)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Table */}
+                        <div className="bg-zinc-900/30 rounded-xl border border-white/5 overflow-hidden">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-white/5 bg-white/5 text-xs text-zinc-400 uppercase tracking-wider">
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('title')}>Title {sortBy === 'title' && '↑↓'}</th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('artist')}>Artist {sortBy === 'artist' && '↑↓'}</th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('rating')}>Rating {sortBy === 'rating' && '↑↓'}</th>
+                                        <th className="p-4 font-medium text-center">Time</th>
+                                        <th className="p-4 font-medium cursor-pointer hover:text-white transition-colors" onClick={() => setSortBy('date')}>Created {sortBy === 'date' && '↑↓'}</th>
+                                        <th className="p-4 font-medium text-center">Status</th>
+                                        <th className="p-4 font-medium">Notes</th>
+                                        <th className="p-4 font-medium text-center">Archive</th>
+                                        <th className="p-4 font-medium">Links</th>
+                                        <th className="p-4 font-medium text-right">Edit</th>
                                     </tr>
-                                ))}
-                                {filteredSongs.length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
-                                            No songs found. Try searching or adding a new one.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {filteredSongs.map(song => (
+                                        <tr key={song.id} className="group hover:bg-white/[0.02] transition-colors">
+                                            <td className="p-4">
+                                                <div className="font-bold text-white text-sm hover:text-primary cursor-pointer transition-colors" onClick={() => onUpdateSong(song)}>{song.title}</div>
+                                            </td>
+                                            <td className="p-4 text-sm text-zinc-300">{song.artist}</td>
+                                            <td className="p-4">
+                                                <div className="flex text-zinc-700 text-[10px]">
+                                                    {Array.from({ length: 5 }).map((_, i) => (
+                                                        <span key={i} className={i < (song.rating || 0) ? "text-yellow-500" : "text-zinc-800"}>★</span>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-center font-mono text-xs text-zinc-500">
+                                                {Math.floor(song.durationSeconds / 60)}m, {song.durationSeconds % 60}s
+                                            </td>
+                                            <td className="p-4 text-xs text-zinc-500">{new Date(song.createdAt || Date.now()).toLocaleDateString()}</td>
+                                            <td className="p-4 text-center">
+                                                <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${song.practiceStatus === 'Ready' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
+                                                    }`}>
+                                                    {song.practiceStatus === 'Ready' && <Icons.Check size={10} className="inline mr-1" />}
+                                                    {song.practiceStatus === 'Practice' && <Icons.Warning size={10} className="inline mr-1" />}
+                                                    {song.practiceStatus || 'Practice'}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-xs text-zinc-500 max-w-[150px] truncate" title={song.generalNotes}>
+                                                {song.generalNotes || '-'}
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <button
+                                                    onClick={() => onDeleteSong(song.id)}
+                                                    className={`p-1.5 rounded-md transition-colors ${usedSongIds.has(song.id) || song.status === 'Archived'
+                                                        ? 'text-orange-400 hover:bg-orange-500/10'
+                                                        : 'text-zinc-600 hover:text-red-400 hover:bg-red-500/10'
+                                                        }`}
+                                                    title={song.status === 'Archived' ? "Un-Archive" : usedSongIds.has(song.id) ? "Archive (Used in Sets)" : "Delete Permanently"}
+                                                >
+                                                    {song.status === 'Archived' ? <Icons.Refresh size={14} /> : usedSongIds.has(song.id) ? <Icons.Archive size={14} /> : <Icons.Trash size={14} />}
+                                                </button>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {/* Top Row: Learning Links */}
+                                                    <div className="flex items-center gap-1.5">
+                                                        <LinkIcon url={song.videoUrl} label="Video" icon={<Icons.Youtube size={12} />} />
+                                                        <LinkIcon url={song.guitarLessonUrl} label="Guitar" icon={<Icons.Guitar size={12} />} />
+                                                        <LinkIcon url={song.bassLessonUrl} label="Bass" icon={<Icons.Music size={12} />} />
+                                                        <LinkIcon url={song.lyricsUrl} label="Lyrics" icon={<Icons.File size={12} />} />
+                                                    </div>
+                                                    {/* Bottom Row: External Links */}
+                                                    <div className="flex items-center gap-1.5 border-t border-white/5 pt-1.5">
+                                                        <LinkIcon url={song.externalLink1} label="Link 1" text="1" />
+                                                        <LinkIcon url={song.externalLink2} label="Link 2" text="2" />
+                                                        <LinkIcon url={song.externalLink3} label="Link 3" text="3" />
+                                                        <LinkIcon url={song.externalLink4} label="Link 4" text="4" />
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <button
+                                                    onClick={() => onUpdateSong(song)}
+                                                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
+                                                    title="Edit Song Details"
+                                                >
+                                                    <Icons.Edit size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {filteredSongs.length === 0 && (
+                                        <tr>
+                                            <td colSpan={10} className="p-8 text-center text-zinc-500 italic">
+                                                No songs found matching your filters.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Danger Zone */}
+                        <div className="mt-12 mb-8 border border-red-900/30 bg-red-950/10 rounded-xl overflow-hidden">
+                            <div className="p-4 bg-red-950/20 border-b border-red-900/30 flex items-center gap-2">
+                                <Icons.Warning className="text-red-500" size={20} />
+                                <h3 className="text-red-400 font-bold text-sm uppercase tracking-wider">Danger Zone</h3>
+                            </div>
+                            <div className="p-6 flex items-center justify-between">
+                                <div>
+                                    <h4 className="text-white font-bold mb-1">Wipe Song Library</h4>
+                                    <p className="text-sm text-zinc-400 max-w-md">
+                                        Permanently delete ALL songs in your library. This action cannot be undone and will remove songs from all setlists.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={onClearLibrary}
+                                    className="px-5 py-2.5 bg-red-900/20 hover:bg-red-600 border border-red-500/50 text-red-200 hover:text-white rounded-lg font-bold transition-all flex items-center gap-2"
+                                >
+                                    <Icons.Trash size={16} />
+                                    Wipe Data
+                                </button>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };
